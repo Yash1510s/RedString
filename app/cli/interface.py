@@ -237,6 +237,67 @@ def print_correlation_summary(relationships: list):
     )
 
 
+def print_investigation_summary(
+    investigation,
+    collector_statuses: dict,
+    evidence_store,
+    findings: list,
+    relationships: list,
+):
+    """
+    Renders the consolidated Executive Terminal Investigation View (MVP 8).
+    Displays Collector Statuses, Key Statistics, and High-Level Key Findings.
+    """
+    from rich.columns import Columns
+    from rich.table import Table
+
+    # 1. Collectors Table
+    col_table = Table(title="COLLECTORS STATUS", border_style="blue", header_style="bold blue")
+    col_table.add_column("Collector", style="white")
+    col_table.add_column("Status", style="bold green", justify="center")
+
+    for collector_name, status in collector_statuses.items():
+        status_style = "bold green" if "COMPLETE" in status or "OK" in status or "SUCCESS" in status else "bold yellow"
+        col_table.add_row(collector_name, f"[{status_style}]{status}[/{status_style}]")
+
+    # 2. Statistics Table
+    subdomains_count = sum(1 for f in findings if f.entity_type == "SUBDOMAIN")
+    tech_count = sum(1 for f in findings if f.entity_type == "TECHNOLOGY")
+    dns_infra_count = sum(1 for f in findings if f.entity_type in ("NAME_SERVER", "MAIL_SERVER"))
+
+    stat_table = Table(title="INVESTIGATION STATISTICS", border_style="cyan", header_style="bold cyan")
+    stat_table.add_column("Metric", style="white")
+    stat_table.add_column("Count", style="bold yellow", justify="right")
+
+    stat_table.add_row("Total Entities", str(len(findings)))
+    stat_table.add_row("Subdomains Identified", str(subdomains_count))
+    stat_table.add_row("Technologies Detected", str(tech_count))
+    stat_table.add_row("Evidence Provenance Items", str(evidence_store.count()))
+    stat_table.add_row("Correlated Relationships", str(len(relationships)))
+
+    # 3. Key Findings Box
+    key_findings_text = (
+        f"[bold white]Key Findings Overview for {investigation.target}:[/bold white]\n\n"
+        f"  • [cyan]{subdomains_count}[/cyan] publicly observable subdomains/hostnames\n"
+        f"  • [cyan]{tech_count}[/cyan] web technologies detected\n"
+        f"  • [cyan]{dns_infra_count}[/cyan] core DNS infrastructure records (NS/MX)\n"
+        f"  • [cyan]{len(relationships)}[/cyan] deterministic entity relationships mapped"
+    )
+
+    findings_panel = Panel(
+        key_findings_text,
+        title="[bold]KEY FINDINGS[/bold]",
+        border_style="magenta",
+        padding=(0, 2),
+    )
+
+    console.print("\n[bold white on blue] === EXECUTIVE INVESTIGATION DASHBOARD === [/bold white on blue]\n")
+    console.print(Columns([col_table, stat_table]))
+    console.print()
+    console.print(findings_panel)
+
+
+
 
 
 

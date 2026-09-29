@@ -49,7 +49,7 @@ def run_app():
     # Render initial header
     print_investigation_header(investigation)
 
-    # Execute MVP 2: DNS, MVP 4: CT, MVP 5: Technology, MVP 6: Normalizer, MVP 7: Correlator
+    # Execute MVP 2: DNS, MVP 4: CT, MVP 5: Technology, MVP 6: Normalizer, MVP 7: Correlator, MVP 8: Executive View
     from app.collectors.dns import DNSCollector
     from app.collectors.certificates import CertificateCollector
     from app.collectors.technologies import TechnologyCollector
@@ -63,9 +63,11 @@ def run_app():
         print_evidence_table,
         print_normalized_findings_summary,
         print_correlation_summary,
+        print_investigation_summary,
     )
 
     evidence_store = EvidenceStore()
+    collector_statuses = {}
 
     # Query DNS
     with console.status("[bold green]Collecting DNS records...[/bold green]", spinner="dots"):
@@ -74,6 +76,7 @@ def run_app():
 
     print_dns_findings(dns_results)
     evidence_store.ingest_dns_results(dns_results)
+    collector_statuses["DNS Intelligence"] = "COMPLETE" if not dns_results.get("errors", {}).get("domain") else "FAILED"
 
     # Query Certificate Transparency
     with console.status("[bold magenta]Querying Certificate Transparency logs...[/bold magenta]", spinner="dots"):
@@ -82,6 +85,7 @@ def run_app():
 
     print_certificate_findings(cert_results)
     evidence_store.ingest_certificate_results(cert_results)
+    collector_statuses["Certificate Transparency"] = "COMPLETE" if not cert_results.get("errors") else "PARTIAL / WARNING"
 
     # Query Technology Detection
     with console.status("[bold yellow]Detecting web technologies...[/bold yellow]", spinner="dots"):
@@ -90,6 +94,7 @@ def run_app():
 
     print_technology_findings(tech_results)
     evidence_store.ingest_technology_results(tech_results)
+    collector_statuses["Technology Detection"] = "COMPLETE" if not tech_results.get("errors", {}).get("http") else "WARNING"
 
     # Execute MVP 6: Normalization
     normalizer = DataNormalizer()
@@ -105,6 +110,17 @@ def run_app():
     print_normalized_findings_summary(normalized_findings)
     console.print()
     print_correlation_summary(relationships)
+
+    # Execute MVP 8: Executive Investigation Dashboard Summary
+    investigation.status = "COMPLETED"
+    print_investigation_summary(
+        investigation,
+        collector_statuses,
+        evidence_store,
+        normalized_findings,
+        relationships,
+    )
+
 
 
 
