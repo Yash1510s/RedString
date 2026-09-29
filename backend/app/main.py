@@ -8,12 +8,15 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.health import router as health_router
 from app.config import settings
+from app.db import init_db
+from app.models import db_models as _db_models  # noqa: F401
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Application lifecycle management."""
-    # Startup actions
+    # Startup actions: ensure database schema exists
+    await init_db()
     yield
     # Shutdown actions
 

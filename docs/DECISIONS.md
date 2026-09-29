@@ -47,3 +47,13 @@ This file tracks foundational and operational decisions for the OSINT Investigat
 - **Reason:** Reflects the core metaphor of connecting evidence nodes with verifiable provenance lines ("red string" on an intelligence corkboard) while preserving the descriptive subtitle.
 - **Alternatives considered:** Generic "OSINT Copilot" or "Resolvia".
 
+---
+
+## ADR-006: Async Storage Models, Entity Deduplication, and Strict SSRF Boundary
+
+- **Date:** 2026-09-29
+- **Decision:** Implement async SQLAlchemy 2.0 ORM models for investigations, entities, relations, evidence, and collector runs. When duplicate entities are observed, attributes are non-destructively merged and raw evidence rows are appended. Implement a pre-flight SSRF Guard and SafeHttpClient enforcing IP checks (blocking loopback, private LAN, link-local, cloud metadata `169.254.169.254`), ports 80/443 only, max 3 redirects, and 2 MB response limits.
+- **Reason:** Fulfills core spec safety rules S2 & S3 and data model requirements (Sections 5.2, 5.3, 5.4). Guarantees that no collector can initiate unauthorized requests to private infrastructure or drop previous investigative evidence.
+- **Alternatives considered:** Blocking SSRF at the proxy level (unsupported in zero-setup local deployments), destructive entity replacement (violates auditability).
+
+
