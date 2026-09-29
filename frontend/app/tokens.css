@@ -1,0 +1,111 @@
+/* ==============================================================================
+   OSINT Investigation Copilot - Design Tokens
+   Defined strictly according to UI_SPEC.md Section 3
+   ============================================================================== */
+
+:root,
+[data-theme="light"] {
+  /* 3.1 Colour: neutrals and text */
+  --bg-canvas: #F7F8FA;
+  --bg-surface: #FFFFFF;
+  --bg-raised: #FFFFFF;
+  --bg-subtle: #F0F2F5;
+  --bg-selected: #E8F0FE;
+
+  --border-subtle: #E4E7EC;
+  --border-default: #DDE1E7;
+  --border-strong: #C3C9D2;
+
+  --text-primary: #14181F;
+  --text-secondary: #4B5563;
+  --text-muted: #6B7280;
+  --text-inverse: #FFFFFF;
+
+  /* 3.2 Colour: accent and status */
+  --accent: #1B5FC4;
+  --accent-fg: #FFFFFF;
+
+  --success-fg: #1B7F4B;
+  --success-bg: #E6F4EC;
+
+  --warning-fg: #8A5A00;
+  --warning-bg: #FFF3D6;
+
+  --danger-fg: #B42318;
+  --danger-bg: #FDECEA;
+
+  --info-fg: #175CD3;
+  --info-bg: #E8F0FE;
+
+  --focus-ring: #1B5FC4;
+
+  /* 3.6 Radii and Elevation */
+  --radius-control: 4px;
+  --radius-panel: 6px;
+  --shadow-overlay: 0 4px 16px rgb(0 0 0 / 0.12);
+}
+
+[data-theme="dark"] {
+  /* 3.1 Colour: neutrals and text */
+  --bg-canvas: #0E1116;
+  --bg-surface: #151A21;
+  --bg-raised: #1B222B;
+  --bg-subtle: #1E252F;
+  --bg-selected: #14233D;
+
+  --border-subtle: #232B35;
+  --border-default: #2A323D;
+  --border-strong: #3A4552;
+
+  --text-primary: #E6EAF0;
+  --text-secondary: #A7B0BD;
+  --text-muted: #8A95A3;
+  --text-inverse: #0E1116;
+
+  /* 3.2 Colour: accent and status */
+  --accent: #6EA3F5;
+  --accent-fg: #0E1116;
+
+  --success-fg: #5FD08F;
+  --success-bg: #12281C;
+
+  --warning-fg: #F2B94B;
+  --warning-bg: #2E2410;
+
+  --danger-fg: #FF8A80;
+  --danger-bg: #331615;
+
+  --info-fg: #8AB4FF;
+  --info-bg: #14233D;
+
+  --focus-ring: #6EA3F5;
+
+  /* 3.6 Radii and Elevation */
+  --radius-control: 4px;
+  --radius-panel: 6px;
+  --shadow-overlay: 0 4px 16px rgb(0 0 0 / 0.36);
+}
+
+/* Common tokens invariant across themes */
+:root {
+  /* 3.3 Okabe-Ito Colour-blind-safe Entity Palette */
+  --entity-domain: #0072B2;
+  --entity-subdomain: #56B4E9;
+  --entity-ip: #E69F00;
+  --entity-technology: #009E73;
+  --entity-certificate: #F0E442;
+  --entity-certificate-stroke: #8A7F00;
+  --entity-repository: #CC79A7;
+  --entity-cloud-provider: #D55E00;
+  --entity-organization: #999999;
+  --entity-nameserver: #999999;
+  --entity-mail-provider: #999999;
+
+  /* 3.5 Typography Stacks */
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, monospace;
+
+  /* Motion */
+  --motion-fast: 120ms ease-out;
+  --motion-normal: 180ms ease-out;
+}
