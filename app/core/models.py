@@ -39,3 +39,15 @@ class Finding(BaseModel):
     evidence_id: str  # e.g. E-001
     collected_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"))
 
+
+class Relationship(BaseModel):
+    """
+    Deterministic relationship model connecting two entities based on evidence.
+    """
+    id: str  # e.g. REL-001
+    source_entity: str  # e.g. example.com
+    relationship_type: str  # HAS_SUBDOMAIN, RESOLVES_TO, USES_TECHNOLOGY, USES_NAMESERVER, USES_MAILSERVER
+    target_entity: str  # e.g. api.example.com, 93.184.216.34, nginx
+    evidence_id: str  # e.g. E-001
+
+

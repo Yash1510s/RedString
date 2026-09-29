@@ -209,6 +209,35 @@ def print_normalized_findings_summary(findings: list):
     )
 
 
+def print_correlation_summary(relationships: list):
+    """
+    Renders a summary panel of correlated relationships grouped by relationship type.
+    """
+    if not relationships:
+        return
+
+    from collections import Counter
+    counts = Counter(r.relationship_type for r in relationships)
+
+    summary_text = (
+        f"[bold blue][+] Correlated Relationships Total:[/bold blue] [bold white]{len(relationships)}[/bold white]\n\n"
+        f"[cyan]Relationship Type Breakdown:[/cyan]\n"
+    )
+
+    for rel_type, count in sorted(counts.items()):
+        summary_text += f"  • [bright_white]{rel_type:18s}[/bright_white]: [blue]{count}[/blue]\n"
+
+    console.print(
+        Panel(
+            summary_text.strip(),
+            title="[bold]ENTITY CORRELATION SUMMARY[/bold]",
+            border_style="blue",
+            padding=(0, 2),
+        )
+    )
+
+
+
 
 
 
