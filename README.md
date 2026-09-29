@@ -1,44 +1,91 @@
-# RedString (OSINT Investigation Copilot)
+# OSINT Investigation Copilot
 
-An operational, evidence-grounded OSINT investigation web tool where analysts enter a domain, passively collect public intelligence (DNS, RDAP, Certificate Transparency, HTTP headers, GitHub metadata), correlate findings into a relationship graph, and generate audit-ready reports.
-
-## Quick Start (Under 10 Commands)
-
-### 1. Backend Setup
-```bash
-cd backend
-python -m venv .venv
-# Windows:
-.venv\Scripts\activate
-# Linux/macOS:
-source .venv/bin/activate
-
-pip install -r requirements.txt
-cp .env.example .env
-uvicorn app.main:app --reload --port 8000
-```
-
-### 2. Frontend Setup
-```bash
-cd frontend
-npm install
-npm run dev
-```
-Open [http://localhost:3000](http://localhost:3000) for the application, or [http://localhost:3000/_ui](http://localhost:3000/_ui) for the Design System Kitchen Sink.
+A terminal-based, evidence-grounded OSINT investigation tool that accepts a target domain, passively collects observable public intelligence (DNS, Certificate Transparency, HTTP/HTML metadata), normalizes findings, establishes deterministic entity relationships, and presents an interactive executive terminal dashboard and relationship graph.
 
 ---
 
-## Architectural Principles & Safety
-- **Passive Only (S1):** Strictly query-based and public metadata. No port scanning, brute-forcing, or exploits.
-- **Strict SSRF Guard (S2):** Outbound HTTP calls resolve first and reject private/loopback/metadata IP ranges, ports other than 80/443, and redirect hops.
-- **Target Validation (S3):** Accepts public domain names only.
-- **Consent Gate (S4):** Requires explicit user confirmation of lawful purpose.
-- **Evidence Provenance:** Every finding and relationship edge traces to an immutable raw evidence record with timestamp.
-- **Grounded AI:** Summaries only cite validated finding IDs; works 100% offline with deterministic template fallback.
+## 🚀 Quick Start & Usage Commands
 
-## Testing & Quality Assurance
-- **Backend Tests:** `pytest backend/tests`
-- **Backend Linting:** `ruff check backend` and `mypy backend`
-- **Frontend Type Check:** `npm --prefix frontend run type-check`
-- **Frontend Tests:** `npm --prefix frontend test`
-- **Frontend Linting:** `npm --prefix frontend run lint`
+If you ever forget how to run the application, use these commands from the project root:
+
+### 1. Run Direct Investigation
+```powershell
+.venv\Scripts\python.exe run.py example.com
+```
+
+### 2. Run Interactive Mode
+```powershell
+.venv\Scripts\python.exe run.py
+```
+
+### 3. Run Test Suite
+```powershell
+.venv\Scripts\pytest
+```
+
+---
+
+## 🛠️ Environment Setup
+
+If setting up on a new machine or environment:
+
+```powershell
+# Create Python virtual environment
+python -m venv .venv
+
+# Install dependencies
+.venv\Scripts\pip install -r requirements.txt
+```
+
+---
+
+## 🔑 Key Features Implemented
+
+* **Passive OSINT Collection:**
+  * **DNS Intelligence:** Queries `A`, `AAAA`, `MX`, `NS`, `TXT`, and `CNAME` records using `dnspython`.
+  * **Certificate Transparency:** Passively queries public crt.sh logs to identify observable subdomains/SANs with wildcard normalization.
+  * **Technology Detection:** Passively inspects HTTP headers (`Server`, `X-Powered-By`) and HTML tags (`<meta name="generator">`, framework assets) for React, Next.js, WordPress, Nginx, Cloudflare, etc.
+* **Evidence Provenance Tracking:** Every finding links to an immutable evidence record (`E-001`, `E-002`, ...) with source, timestamp, and query details.
+* **Finding Normalization:** Converts raw findings into standard `Finding` objects (`FND-001`, `FND-002`, ...) categorized by entity type.
+* **Entity Correlation:** Generates deterministic relationships (`HAS_SUBDOMAIN`, `RESOLVES_TO`, `USES_NAMESERVER`, `USES_MAILSERVER`, `USES_TECHNOLOGY`).
+* **Terminal Visualizations:**
+  * High-contrast, theme-agnostic Rich terminal formatting.
+  * **ASCII/Rich Relationship Graph:** Text-based tree view linking target domain to entities and evidence IDs.
+  * **Executive Dashboard:** Collectors status, investigation metrics, and key findings overview.
+
+---
+
+## 📁 Project Structure
+
+```text
+RedString/
+├── app/
+│   ├── main.py              # CLI orchestrator & execution workflow
+│   ├── cli/
+│   │   └── interface.py     # High-contrast Rich terminal UI renderers
+│   ├── collectors/
+│   │   ├── dns.py           # Passive DNS collector
+│   │   ├── certificates.py  # Certificate Transparency collector (crt.sh)
+│   │   └── technologies.py  # Passive HTTP/HTML technology collector
+│   ├── core/
+│   │   ├── models.py        # Pydantic models (Investigation, Evidence, Finding, Relationship)
+│   │   ├── validation.py    # Target domain validation rules
+│   │   ├── evidence.py      # EvidenceStore provenance manager
+│   │   ├── normalizer.py    # DataNormalizer finding entity converter
+│   │   └── correlator.py    # DataCorrelator relationship generator
+│   └── graph/
+│       └── builder.py       # Terminal Rich relationship tree builder
+├── tests/                   # Pytest unit test suite
+├── legacy/                  # Legacy web & backend archives
+├── pytest.ini
+├── requirements.txt
+└── run.py                   # Root execution entrypoint
+```
+
+---
+
+## 🛡️ Safety & Ethical Scope
+
+* **Passive Only:** Strictly public metadata queries. No port scanning, brute-forcing, or exploitation.
+* **Target Validation:** Rejects IP literals, URLs, local hostnames, and credentials.
+* **Fault Tolerance:** Individual collector failures or network timeouts generate warnings without crashing the investigation.
