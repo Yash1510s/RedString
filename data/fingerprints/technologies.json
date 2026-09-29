@@ -1,0 +1,100 @@
+{
+  "version": "1.0.0",
+  "updated_at": "2026-03-15T00:00:00Z",
+  "rules": [
+    {
+      "name": "Cloudflare",
+      "category": "CDN / Reverse Proxy",
+      "confidence": "high",
+      "headers": {
+        "server": "(?i)cloudflare",
+        "cf-ray": ".+"
+      }
+    },
+    {
+      "name": "Nginx",
+      "category": "Web Server",
+      "confidence": "high",
+      "headers": {
+        "server": "(?i)nginx"
+      }
+    },
+    {
+      "name": "Apache",
+      "category": "Web Server",
+      "confidence": "high",
+      "headers": {
+        "server": "(?i)apache"
+      }
+    },
+    {
+      "name": "Amazon CloudFront",
+      "category": "CDN",
+      "confidence": "high",
+      "headers": {
+        "via": "(?i)cloudfront",
+        "x-amz-cf-id": ".+"
+      }
+    },
+    {
+      "name": "Vercel",
+      "category": "PaaS / Hosting",
+      "confidence": "high",
+      "headers": {
+        "x-vercel-id": ".+",
+        "server": "(?i)vercel"
+      }
+    },
+    {
+      "name": "Next.js",
+      "category": "JavaScript Framework",
+      "confidence": "high",
+      "headers": {
+        "x-powered-by": "(?i)next\\.js"
+      },
+      "html": [
+        "/_next/static/",
+        "id=\"__next\""
+      ]
+    },
+    {
+      "name": "React",
+      "category": "JavaScript Library",
+      "confidence": "medium",
+      "html": [
+        "data-reactroot",
+        "react.production.min.js",
+        "_react"
+      ]
+    },
+    {
+      "name": "WordPress",
+      "category": "CMS",
+      "confidence": "high",
+      "headers": {
+        "x-powered-by": "(?i)wp"
+      },
+      "html": [
+        "/wp-content/",
+        "/wp-includes/",
+        "content=\"WordPress"
+      ]
+    },
+    {
+      "name": "HSTS",
+      "category": "Security Header",
+      "confidence": "high",
+      "headers": {
+        "strict-transport-security": ".+"
+      }
+    },
+    {
+      "name": "CSP",
+      "category": "Security Header",
+      "confidence": "high",
+      "headers": {
+        "content-security-policy": ".+"
+      }
+    }
+  ]
+}

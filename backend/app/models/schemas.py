@@ -20,6 +20,7 @@ class EntityType(str, Enum):
     nameserver = "nameserver"
     mail_provider = "mail_provider"
     cloud_provider = "cloud_provider"
+    person = "person"
 
 
 class RelationType(str, Enum):
@@ -34,6 +35,8 @@ class RelationType(str, Enum):
     USES_MAIL = "USES_MAIL"
     OWNS = "OWNS"
     MENTIONS = "MENTIONS"
+    CONTRIBUTED_TO = "CONTRIBUTED_TO"
+    ASSOCIATED_WITH = "ASSOCIATED_WITH"
 
 
 class Confidence(str, Enum):
