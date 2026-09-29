@@ -49,8 +49,16 @@ def run_app():
     # Render initial header
     print_investigation_header(investigation)
 
-    console.print("\n[dim]MVP 1 Application Shell initialized successfully.[/dim]")
-    console.print("[dim]Collectors (DNS, Certificate Transparency, Technologies) will be added in subsequent phases.[/dim]\n")
+    # Execute MVP 2: DNS Collector
+    from app.collectors.dns import DNSCollector
+    from app.cli.interface import print_dns_findings
+
+    with console.status("[bold green]Collecting DNS records...[/bold green]", spinner="dots"):
+        collector = DNSCollector()
+        dns_results = collector.collect(target_domain)
+
+    print_dns_findings(dns_results)
+
 
 
 if __name__ == "__main__":

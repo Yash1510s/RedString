@@ -64,3 +64,34 @@ def print_error(message: str):
     Prints an error message in a styled format.
     """
     console.print(f"[bold red]Error:[/bold red] {message}")
+
+
+def print_dns_findings(dns_data: dict):
+    """
+    Renders DNS findings in readable Rich panels and tables.
+    """
+    findings = dns_data.get("findings", {})
+    errors = dns_data.get("errors", {})
+
+    console.print("\n[bold blue]=== DNS INTELLIGENCE ===[/bold blue]\n")
+
+    if errors.get("domain"):
+        console.print(f"[bold red]![/bold red] {errors['domain']}")
+        return
+
+    has_records = False
+    for rtype, records in findings.items():
+        if records:
+            has_records = True
+            console.print(f"[bold cyan]{rtype} Records[/bold cyan] ({len(records)})")
+            for record in records:
+                console.print(f"  • [bright_white]{record}[/bright_white]")
+            console.print()
+
+    if not has_records:
+        console.print("[dim]No DNS records resolved for this target.[/dim]")
+
+    if errors:
+        for rtype, err in errors.items():
+            console.print(f"[dim yellow]Warning ({rtype}): {err}[/dim yellow]")
+
