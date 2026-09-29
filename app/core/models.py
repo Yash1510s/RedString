@@ -26,3 +26,16 @@ class Evidence(BaseModel):
     source_reference: str  # e.g. "A record query for example.com"
     collected_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"))
     description: str
+
+
+class Finding(BaseModel):
+    """
+    Normalized OSINT finding representation across all collectors.
+    """
+    id: str  # e.g. FND-001
+    entity_type: str  # DOMAIN, SUBDOMAIN, IP_ADDRESS, MAIL_SERVER, NAME_SERVER, TXT_RECORD, CANONICAL_NAME, TECHNOLOGY
+    value: str
+    source: str  # DNS, CERTIFICATE_TRANSPARENCY, HTTP_ANALYSIS
+    evidence_id: str  # e.g. E-001
+    collected_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"))
+

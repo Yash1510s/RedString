@@ -49,16 +49,18 @@ def run_app():
     # Render initial header
     print_investigation_header(investigation)
 
-    # Execute MVP 2: DNS, MVP 4: CT, MVP 5: Technology Collector
+    # Execute MVP 2: DNS, MVP 4: CT, MVP 5: Technology Collector, MVP 6: Normalizer
     from app.collectors.dns import DNSCollector
     from app.collectors.certificates import CertificateCollector
     from app.collectors.technologies import TechnologyCollector
     from app.core.evidence import EvidenceStore
+    from app.core.normalizer import DataNormalizer
     from app.cli.interface import (
         print_dns_findings,
         print_certificate_findings,
         print_technology_findings,
         print_evidence_table,
+        print_normalized_findings_summary,
     )
 
     evidence_store = EvidenceStore()
@@ -87,8 +89,15 @@ def run_app():
     print_technology_findings(tech_results)
     evidence_store.ingest_technology_results(tech_results)
 
-    # Display consolidated Evidence table
+    # Execute MVP 6: Normalization
+    normalizer = DataNormalizer()
+    normalized_findings = normalizer.normalize_evidence(evidence_store.get_all())
+
+    # Display consolidated Evidence table & Normalization Summary
     print_evidence_table(evidence_store)
+    console.print()
+    print_normalized_findings_summary(normalized_findings)
+
 
 
 

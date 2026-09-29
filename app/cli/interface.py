@@ -180,5 +180,35 @@ def print_technology_findings(tech_data: dict):
         console.print("[dim]No web technologies detected from passive HTTP/HTML inspection.[/dim]\n")
 
 
+def print_normalized_findings_summary(findings: list):
+    """
+    Renders a summary panel of normalized findings grouped by entity type.
+    """
+    if not findings:
+        return
+
+    from collections import Counter
+    counts = Counter(f.entity_type for f in findings)
+
+    summary_text = (
+        f"[bold green][+] Normalized Findings Total:[/bold green] [bold white]{len(findings)}[/bold white]\n\n"
+        f"[cyan]Entity Type Breakdown:[/cyan]\n"
+    )
+
+
+    for entity_type, count in sorted(counts.items()):
+        summary_text += f"  • [bright_white]{entity_type:15s}[/bright_white]: [green]{count}[/green]\n"
+
+    console.print(
+        Panel(
+            summary_text.strip(),
+            title="[bold]DATA NORMALIZATION SUMMARY[/bold]",
+            border_style="green",
+            padding=(0, 2),
+        )
+    )
+
+
+
 
 
