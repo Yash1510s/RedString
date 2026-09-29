@@ -297,6 +297,16 @@ def print_investigation_summary(
     console.print(findings_panel)
 
 
+def print_relationship_graph(tree):
+    """
+    Renders the terminal ASCII/Rich relationship graph.
+    """
+    console.print("\n[bold cyan]=== TERMINAL RELATIONSHIP GRAPH ===[/bold cyan]\n")
+    console.print(tree)
+    console.print()
+
+
+
 
 
 
