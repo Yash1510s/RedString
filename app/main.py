@@ -49,22 +49,37 @@ def run_app():
     # Render initial header
     print_investigation_header(investigation)
 
-    # Execute MVP 2: DNS Collector & MVP 3: Evidence Model
+    # Execute MVP 2: DNS Collector & MVP 4: Certificate Transparency Collector
     from app.collectors.dns import DNSCollector
+    from app.collectors.certificates import CertificateCollector
     from app.core.evidence import EvidenceStore
-    from app.cli.interface import print_dns_findings, print_evidence_table
+    from app.cli.interface import (
+        print_dns_findings,
+        print_certificate_findings,
+        print_evidence_table,
+    )
 
     evidence_store = EvidenceStore()
 
+    # Query DNS
     with console.status("[bold green]Collecting DNS records...[/bold green]", spinner="dots"):
-        collector = DNSCollector()
-        dns_results = collector.collect(target_domain)
+        dns_collector = DNSCollector()
+        dns_results = dns_collector.collect(target_domain)
 
     print_dns_findings(dns_results)
-
-    # Ingest findings into Evidence Store
     evidence_store.ingest_dns_results(dns_results)
+
+    # Query Certificate Transparency
+    with console.status("[bold magenta]Querying Certificate Transparency logs...[/bold magenta]", spinner="dots"):
+        cert_collector = CertificateCollector()
+        cert_results = cert_collector.collect(target_domain)
+
+    print_certificate_findings(cert_results)
+    evidence_store.ingest_certificate_results(cert_results)
+
+    # Display consolidated Evidence table
     print_evidence_table(evidence_store)
+
 
 
 

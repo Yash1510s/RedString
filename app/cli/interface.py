@@ -126,3 +126,33 @@ def print_evidence_table(evidence_store):
     console.print(table)
 
 
+def print_certificate_findings(cert_data: dict):
+    """
+    Renders Certificate Transparency findings in Rich formatted sections.
+    """
+    findings = cert_data.get("findings", [])
+    errors = cert_data.get("errors", {})
+
+    console.print("\n[bold magenta]=== CERTIFICATE INTELLIGENCE ===[/bold magenta]\n")
+
+    if errors.get("crt.sh"):
+        console.print(f"[dim yellow]Warning (Certificate Transparency): {errors['crt.sh']}[/dim yellow]")
+        if not findings:
+            return
+
+    if findings:
+        console.print(f"[bold cyan]Publicly Observable Hostnames[/bold cyan] ({len(findings)})")
+        # Display max top 15 hostnames cleanly, summarize if larger
+        display_limit = 15
+        for hostname in findings[:display_limit]:
+            console.print(f"  • [bright_white]{hostname}[/bright_white]")
+        
+        if len(findings) > display_limit:
+            console.print(f"  [dim]... and {len(findings) - display_limit} more hostnames (recorded in evidence).[/dim]")
+
+        console.print("\n[italic dim]* Publicly observable hostnames identified through Certificate Transparency.[/italic dim]\n")
+    else:
+        console.print("[dim]No public Certificate Transparency hostnames observed for this target.[/dim]\n")
+
+
+

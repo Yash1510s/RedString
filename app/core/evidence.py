@@ -68,8 +68,30 @@ class EvidenceStore:
 
         return added
 
+    def ingest_certificate_results(self, cert_data: Dict[str, Any]) -> List[Evidence]:
+        """
+        Transforms Certificate Transparency hostnames into structured Evidence records.
+        """
+        target = cert_data.get("target", "")
+        findings = cert_data.get("findings", [])
+        added: List[Evidence] = []
+
+        for hostname in findings:
+            entity_type = "DOMAIN" if hostname == target else "SUBDOMAIN"
+            ev = self.add_evidence(
+                finding=hostname,
+                entity_type=entity_type,
+                source="CERTIFICATE_TRANSPARENCY",
+                source_reference=f"crt.sh Certificate SAN entry for {target}",
+                description=f"Publicly observable hostname '{hostname}' identified in Certificate Transparency log.",
+            )
+            added.append(ev)
+
+        return added
+
     def get_all(self) -> List[Evidence]:
         return list(self._items)
+
 
     def count(self) -> int:
         return len(self._items)
