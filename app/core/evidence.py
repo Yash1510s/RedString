@@ -89,8 +89,31 @@ class EvidenceStore:
 
         return added
 
+    def ingest_technology_results(self, tech_data: Dict[str, Any]) -> List[Evidence]:
+        """
+        Transforms observed technologies into structured Evidence records.
+        """
+        target = tech_data.get("target", "")
+        findings = tech_data.get("findings", [])
+        added: List[Evidence] = []
+
+        for item in findings:
+            tech_name = item.get("name", "")
+            basis = item.get("basis", "HTTP metadata observation")
+            ev = self.add_evidence(
+                finding=tech_name,
+                entity_type="TECHNOLOGY",
+                source="HTTP_ANALYSIS",
+                source_reference=basis,
+                description=f"Technology '{tech_name}' observed on target '{target}'. Basis: {basis}",
+            )
+            added.append(ev)
+
+        return added
+
     def get_all(self) -> List[Evidence]:
         return list(self._items)
+
 
 
     def count(self) -> int:

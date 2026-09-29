@@ -49,13 +49,15 @@ def run_app():
     # Render initial header
     print_investigation_header(investigation)
 
-    # Execute MVP 2: DNS Collector & MVP 4: Certificate Transparency Collector
+    # Execute MVP 2: DNS, MVP 4: CT, MVP 5: Technology Collector
     from app.collectors.dns import DNSCollector
     from app.collectors.certificates import CertificateCollector
+    from app.collectors.technologies import TechnologyCollector
     from app.core.evidence import EvidenceStore
     from app.cli.interface import (
         print_dns_findings,
         print_certificate_findings,
+        print_technology_findings,
         print_evidence_table,
     )
 
@@ -77,8 +79,17 @@ def run_app():
     print_certificate_findings(cert_results)
     evidence_store.ingest_certificate_results(cert_results)
 
+    # Query Technology Detection
+    with console.status("[bold yellow]Detecting web technologies...[/bold yellow]", spinner="dots"):
+        tech_collector = TechnologyCollector()
+        tech_results = tech_collector.collect(target_domain)
+
+    print_technology_findings(tech_results)
+    evidence_store.ingest_technology_results(tech_results)
+
     # Display consolidated Evidence table
     print_evidence_table(evidence_store)
+
 
 
 

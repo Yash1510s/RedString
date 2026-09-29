@@ -155,4 +155,30 @@ def print_certificate_findings(cert_data: dict):
         console.print("[dim]No public Certificate Transparency hostnames observed for this target.[/dim]\n")
 
 
+def print_technology_findings(tech_data: dict):
+    """
+    Renders passive HTTP/HTML Technology findings in Rich formatted sections.
+    """
+    findings = tech_data.get("findings", [])
+    errors = tech_data.get("errors", {})
+
+    console.print("\n[bold yellow]=== TECHNOLOGY INTELLIGENCE ===[/bold yellow]\n")
+
+    if errors.get("http"):
+        console.print(f"[dim yellow]Warning (HTTP Analysis): {errors['http']}[/dim yellow]")
+        if not findings:
+            return
+
+    if findings:
+        console.print(f"[bold cyan]Observed Web Technologies[/bold cyan] ({len(findings)})")
+        for item in findings:
+            name = item.get("name", "Unknown")
+            basis = item.get("basis", "")
+            console.print(f"  • [bright_white]{name}[/bright_white] [dim]— {basis}[/dim]")
+        console.print()
+    else:
+        console.print("[dim]No web technologies detected from passive HTTP/HTML inspection.[/dim]\n")
+
+
+
 
