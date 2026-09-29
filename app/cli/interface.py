@@ -95,3 +95,34 @@ def print_dns_findings(dns_data: dict):
         for rtype, err in errors.items():
             console.print(f"[dim yellow]Warning ({rtype}): {err}[/dim yellow]")
 
+
+def print_evidence_table(evidence_store):
+    """
+    Renders structured evidence items in a clean Rich table.
+    """
+    from rich.table import Table
+
+    items = evidence_store.get_all()
+    if not items:
+        return
+
+    table = Table(title="EVIDENCE PROVENANCE", border_style="cyan", header_style="bold cyan")
+    table.add_column("ID", style="bold yellow", width=8)
+    table.add_column("Finding", style="white", min_width=20)
+    table.add_column("Entity Type", style="green")
+    table.add_column("Source", style="magenta")
+    table.add_column("Source Reference", style="dim white")
+
+    for ev in items:
+        table.add_row(
+            ev.id,
+            ev.finding,
+            ev.entity_type,
+            ev.source,
+            ev.source_reference,
+        )
+
+    console.print()
+    console.print(table)
+
+

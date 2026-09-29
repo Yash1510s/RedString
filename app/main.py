@@ -49,15 +49,23 @@ def run_app():
     # Render initial header
     print_investigation_header(investigation)
 
-    # Execute MVP 2: DNS Collector
+    # Execute MVP 2: DNS Collector & MVP 3: Evidence Model
     from app.collectors.dns import DNSCollector
-    from app.cli.interface import print_dns_findings
+    from app.core.evidence import EvidenceStore
+    from app.cli.interface import print_dns_findings, print_evidence_table
+
+    evidence_store = EvidenceStore()
 
     with console.status("[bold green]Collecting DNS records...[/bold green]", spinner="dots"):
         collector = DNSCollector()
         dns_results = collector.collect(target_domain)
 
     print_dns_findings(dns_results)
+
+    # Ingest findings into Evidence Store
+    evidence_store.ingest_dns_results(dns_results)
+    print_evidence_table(evidence_store)
+
 
 
 
