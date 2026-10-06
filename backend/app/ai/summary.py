@@ -1,9 +1,12 @@
-"""Grounded AI Copilot summary generator and deterministic fallback per Spec Section 10."""
-
+import json
 import logging
 from collections import defaultdict
 from typing import Any
 
+import httpx
+
+from app.ai.prompts import PROMPT_VERSION, SYSTEM_PROMPT, USER_PROMPT_TEMPLATE
+from app.config import settings
 from app.models.db_models import Entity
 
 logger = logging.getLogger(__name__)
@@ -263,3 +266,143 @@ def generate_template_summary(
         "is_fallback": True,
         "generator": "Template Summary (Grounded without AI)",
     }
+
+
+async def generate_grounded_summary(
+    target: str,
+    entities: list[Entity],
+    counts: dict[str, int],
+    official_domain: str | None = None,
+) -> dict[str, Any]:
+    """Generate an AI-powered grounded summary or fall back safely to deterministic template."""
+    provider = (settings.llm_provider or "none").lower().strip()
+    if provider == "none" or (not settings.llm_api_key and provider != "ollama"):
+        return generate_template_summary(target, entities, counts)
+
+    valid_ids = {f"F-{e.id:06d}" for e in entities}
+    findings_payload = [
+        {
+            "id": f"F-{e.id:06d}",
+            "type": e.type,
+            "value": e.value,
+            "attributes": e.attributes,
+        }
+        for e in entities
+    ]
+
+    user_prompt = USER_PROMPT_TEMPLATE.format(
+        target=target,
+        official_domain=official_domain or "Not specified",
+        counts_json=json.dumps(counts),
+        findings_json=json.dumps(findings_payload, indent=2),
+    )
+
+    try:
+        if provider == "gemini":
+            model = settings.llm_model or "gemini-3.8-flash"
+            endpoint = (
+                f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+                f"?key={settings.llm_api_key}"
+            )
+            payload = {
+                "contents": [
+                    {
+                        "parts": [
+                            {"text": f"{SYSTEM_PROMPT}\n\n{user_prompt}"}
+                        ]
+                    }
+                ],
+                "generationConfig": {
+                    "temperature": 0.1,
+                    "responseMimeType": "application/json",
+                },
+            }
+            async with httpx.AsyncClient(timeout=35.0) as client:
+                res = await client.post(endpoint, json=payload)
+                if res.status_code != 200:
+                    logger.warning("Gemini generation failed (%s): %s", res.status_code, res.text)
+                    fallback = generate_template_summary(target, entities, counts)
+                    fallback["fallback_reason"] = f"Gemini API returned status {res.status_code}"
+                    return fallback
+
+                res_json = res.json()
+                raw_text = res_json["candidates"][0]["content"]["parts"][0]["text"]
+                parsed = json.loads(raw_text)
+
+        elif provider == "openai":
+            model = settings.llm_model or "gpt-4o-mini"
+            endpoint = "https://api.openai.com/v1/chat/completions"
+            headers = {
+                "Authorization": f"Bearer {settings.llm_api_key}",
+                "Content-Type": "application/json",
+            }
+            payload = {
+                "model": model,
+                "temperature": 0.1,
+                "response_format": {"type": "json_object"},
+                "messages": [
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": user_prompt},
+                ],
+            }
+            async with httpx.AsyncClient(timeout=35.0) as client:
+                res = await client.post(endpoint, json=payload, headers=headers)
+                if res.status_code != 200:
+                    logger.warning("OpenAI generation failed (%s): %s", res.status_code, res.text)
+                    fallback = generate_template_summary(target, entities, counts)
+                    fallback["fallback_reason"] = f"OpenAI API returned status {res.status_code}"
+                    return fallback
+
+                res_json = res.json()
+                raw_text = res_json["choices"][0]["message"]["content"]
+                parsed = json.loads(raw_text)
+
+        elif provider == "ollama":
+            model = settings.llm_model or "llama3.2"
+            base_url = (settings.ollama_base_url or "http://localhost:11434").rstrip("/")
+            endpoint = f"{base_url}/api/chat"
+            payload = {
+                "model": model,
+                "format": "json",
+                "stream": False,
+                "options": {"temperature": 0.1},
+                "messages": [
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": user_prompt},
+                ],
+            }
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                res = await client.post(endpoint, json=payload)
+                if res.status_code != 200:
+                    logger.warning("Ollama generation failed (%s): %s", res.status_code, res.text)
+                    fallback = generate_template_summary(target, entities, counts)
+                    fallback["fallback_reason"] = f"Ollama returned status {res.status_code}"
+                    return fallback
+
+                res_json = res.json()
+                raw_text = res_json["message"]["content"]
+                parsed = json.loads(raw_text)
+
+        else:
+            return generate_template_summary(target, entities, counts)
+
+        # Validate structured schema and cited finding IDs per Spec Section 10
+        is_valid, reason = validate_summary(parsed, valid_ids)
+        if not is_valid:
+            logger.warning("LLM output validation failed: %s; using grounded fallback", reason)
+            fallback = generate_template_summary(target, entities, counts)
+            fallback["fallback_reason"] = f"LLM citation validation failed: {reason}"
+            return fallback
+
+        parsed["is_fallback"] = False
+        parsed["model"] = f"{provider}:{settings.llm_model or 'default'}"
+        parsed["prompt_version"] = PROMPT_VERSION
+        parsed["generator"] = f"AI Grounded Summary ({provider.upper()})"
+        return parsed
+
+    except Exception as exc:
+        logger.exception("Unexpected error during LLM generation: %s", exc)
+        fallback = generate_template_summary(target, entities, counts)
+        fallback["fallback_reason"] = str(exc)
+        return fallback
+

@@ -9,7 +9,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.ai.summary import generate_template_summary
+from app.ai.summary import generate_grounded_summary, generate_template_summary
 from app.core.orchestrator import orchestrator, stream_investigation_events
 from app.core.ssrf_guard import InvalidTargetError, validate_target_domain
 from app.correlation.engine import CorrelationEngine
@@ -538,15 +538,17 @@ async def create_investigation_summary(
     for e in entities:
         counts[e.type] += 1
 
-    summary_data = generate_template_summary(inv.target, entities, counts)
+    summary_data = await generate_grounded_summary(
+        inv.target, entities, counts, official_domain=inv.official_domain
+    )
 
     # Store in database
     ai_record = AISummary(
         investigation_id=investigation_id,
-        model="deterministic-grounded-template-v1",
-        prompt_version="1.0.0",
+        model=summary_data.get("model", "deterministic-grounded-template-v1"),
+        prompt_version=summary_data.get("prompt_version", "1.0.0"),
         output=summary_data,
-        validation_status="validated",
+        validation_status="validated" if not summary_data.get("is_fallback") else "fallback",
     )
     session.add(ai_record)
     await session.commit()

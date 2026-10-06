@@ -71,3 +71,16 @@ def test_prompt_injection_safety_in_template():
     assert isinstance(summary["key_findings"], list)
     assert isinstance(summary["observations"], list)
     assert summary["is_fallback"] is True
+
+
+import pytest
+from app.ai.summary import generate_grounded_summary
+
+@pytest.mark.asyncio
+async def test_generate_grounded_summary_fallback_on_none():
+    now = datetime.now(timezone.utc)
+    e1 = Entity(id=1, investigation_id=1, type="subdomain", value="test.example.com", attributes={}, first_seen=now)
+    summary = await generate_grounded_summary("example.com", [e1], {"subdomain": 1})
+    assert summary["is_fallback"] is True
+    assert "example.com" in summary["summary"]
+
