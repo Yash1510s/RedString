@@ -14,6 +14,11 @@ import {
   Shield,
   Layers,
   Sparkles,
+  Download,
+  Star,
+  Keyboard,
+  FileSpreadsheet,
+  FileJson,
 } from "lucide-react";
 
 import {
@@ -32,9 +37,12 @@ import {
   InvestigationGraphData,
   InvestigationSummaryData,
 } from "@/lib/api";
+import { exportFindingsToCSV, exportInvestigationToJSON } from "@/lib/exportUtils";
 import { CollectorProgress, CollectorState } from "@/components/investigation/CollectorProgress";
 import { EvidencePanel } from "@/components/investigation/EvidencePanel";
 import { SummaryCard } from "@/components/investigation/SummaryCard";
+import { SecurityPostureCard } from "@/components/investigation/SecurityPostureCard";
+import { ShortcutsModal } from "@/components/investigation/ShortcutsModal";
 import { ConfidenceBadge } from "@/components/ui/ConfidenceBadge";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 
@@ -70,11 +78,14 @@ export default function InvestigationWorkspacePage() {
   // Navigation tab from URL or default
   const activeTab = (searchParams.get("tab") as WorkspaceTab) || "overview";
 
-  const setTab = (tab: WorkspaceTab) => {
-    const nextParams = new URLSearchParams(searchParams.toString());
-    nextParams.set("tab", tab);
-    router.replace(`/investigations/${id}?${nextParams.toString()}`);
-  };
+  const setTab = useCallback(
+    (tab: WorkspaceTab) => {
+      const nextParams = new URLSearchParams(searchParams.toString());
+      nextParams.set("tab", tab);
+      router.replace(`/investigations/${id}?${nextParams.toString()}`);
+    },
+    [id, router, searchParams]
+  );
 
   // State
   const [investigation, setInvestigation] = useState<InvestigationItem | null>(null);
@@ -101,6 +112,43 @@ export default function InvestigationWorkspacePage() {
   const [tableSearch, setTableSearch] = useState("");
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // Starred findings & shortcuts modal states
+  const [starredFindingIds, setStarredFindingIds] = useState<Set<string>>(new Set());
+  const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
+
+  // Load starred findings from localStorage
+  useEffect(() => {
+    if (!id) return;
+    try {
+      const stored = localStorage.getItem(`redstring_starred_${id}`);
+      if (stored) {
+        setStarredFindingIds(new Set(JSON.parse(stored)));
+      }
+    } catch {
+      // ignore
+    }
+  }, [id]);
+
+  const handleToggleStarFinding = useCallback(
+    (findingId: string) => {
+      setStarredFindingIds((prev) => {
+        const next = new Set(prev);
+        if (next.has(findingId)) {
+          next.delete(findingId);
+        } else {
+          next.add(findingId);
+        }
+        try {
+          localStorage.setItem(`redstring_starred_${id}`, JSON.stringify(Array.from(next)));
+        } catch {
+          // ignore
+        }
+        return next;
+      });
+    },
+    [id]
+  );
 
   // Dedicated graph fetcher
   const fetchGraph = useCallback(async () => {
@@ -282,7 +330,7 @@ export default function InvestigationWorkspacePage() {
   };
 
   // Regenerate summary
-  const handleRegenerateSummary = async () => {
+  const handleRegenerateSummary = useCallback(async () => {
     setLoadingSummary(true);
     try {
       const regenerated = await regenerateInvestigationSummary(id);
@@ -292,7 +340,7 @@ export default function InvestigationWorkspacePage() {
     } finally {
       setLoadingSummary(false);
     }
-  };
+  }, [id]);
 
   // Delete investigation
   const handleDeleteInvestigation = async () => {
@@ -306,6 +354,48 @@ export default function InvestigationWorkspacePage() {
       setIsDeleteDialogOpen(false);
     }
   };
+
+  // Analyst Keyboard Shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (
+        target &&
+        (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)
+      ) {
+        return;
+      }
+
+      if (e.key === "?") {
+        e.preventDefault();
+        setIsShortcutsOpen((prev) => !prev);
+      } else if (e.key === "Escape") {
+        setIsShortcutsOpen(false);
+        setSelectedFinding(null);
+      } else if (e.key === "1") {
+        setTab("overview");
+      } else if (e.key === "2") {
+        setTab("graph");
+      } else if (e.key === "3") {
+        setTab("findings");
+      } else if (e.key === "4") {
+        setTab("certificates");
+      } else if (e.key === "5") {
+        setTab("technologies");
+      } else if (e.key === "6") {
+        setTab("repositories");
+      } else if (e.key === "7") {
+        setTab("summary");
+      } else if (e.key === "r" || e.key === "R") {
+        handleRegenerateSummary();
+      } else if (e.key === "e" || e.key === "E") {
+        window.open(getReportUrl(id), "_blank");
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [id, handleRegenerateSummary, setTab]);
 
   // Filter findings for category tabs
   const filteredCategoryFindings = useMemo(() => {
@@ -329,8 +419,13 @@ export default function InvestigationWorkspacePage() {
       );
     }
 
-    return list;
-  }, [findings, activeTab, tableSearch]);
+    // Sort starred findings to the top
+    return [...list].sort((a, b) => {
+      const aStarred = starredFindingIds.has(a.finding_id) ? 1 : 0;
+      const bStarred = starredFindingIds.has(b.finding_id) ? 1 : 0;
+      return bStarred - aStarred;
+    });
+  }, [findings, activeTab, tableSearch, starredFindingIds]);
 
   // Aggregate category counts for tab badges
   const counts = useMemo(() => {
@@ -403,7 +498,18 @@ export default function InvestigationWorkspacePage() {
           </div>
 
           {/* Header Action Buttons */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <button
+              type="button"
+              onClick={() => setIsShortcutsOpen(true)}
+              className="px-2 py-1 text-xs font-mono rounded-control border border-border-default hover:bg-subtle text-text-secondary flex items-center gap-1 transition-colors"
+              title="Analyst Keyboard Shortcuts (?)"
+              aria-label="Keyboard Shortcuts"
+            >
+              <Keyboard className="w-3.5 h-3.5 text-accent" />
+              <span>?</span>
+            </button>
+
             <button
               type="button"
               onClick={loadData}
@@ -412,6 +518,33 @@ export default function InvestigationWorkspacePage() {
             >
               <RefreshCw className="w-3.5 h-3.5" />
               <span>Refresh</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => exportFindingsToCSV(findings, investigation?.target || "target")}
+              className="px-2.5 py-1 text-xs font-mono rounded-control border border-border-default hover:bg-subtle text-text-secondary flex items-center gap-1.5 transition-colors"
+              title="Export all verified findings to CSV spreadsheet"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-accent" />
+              <span>CSV</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() =>
+                exportInvestigationToJSON({
+                  investigation,
+                  findings,
+                  graphData,
+                  summary: summaryData,
+                })
+              }
+              className="px-2.5 py-1 text-xs font-mono rounded-control border border-border-default hover:bg-subtle text-text-secondary flex items-center gap-1.5 transition-colors"
+              title="Export complete investigation archive to JSON"
+            >
+              <FileJson className="w-3.5 h-3.5 text-accent" />
+              <span>JSON</span>
             </button>
 
             <a
@@ -520,6 +653,12 @@ export default function InvestigationWorkspacePage() {
                 loading={loadingSummary}
               />
 
+              {/* Passive Security Posture Indicators */}
+              <SecurityPostureCard
+                findings={findings}
+                targetDomain={investigation?.target || ""}
+              />
+
               {/* Collectors Details Table */}
               <div className="bg-surface border border-border rounded-panel p-4 space-y-3">
                 <h3 className="text-xs font-semibold uppercase tracking-wider text-text-muted font-mono">
@@ -609,6 +748,8 @@ export default function InvestigationWorkspacePage() {
                     graphData={graphData}
                     onSelectEntity={handleSelectEntityFromGraph}
                     selectedEntityId={selectedFinding?.entity_id}
+                    starredFindingIds={starredFindingIds}
+                    onToggleStarFinding={handleToggleStarFinding}
                   />
                 )
               ) : null}
@@ -649,6 +790,7 @@ export default function InvestigationWorkspacePage() {
                   <table className="w-full text-left text-xs border-collapse">
                     <thead>
                       <tr className="bg-canvas border-b border-border text-text-muted text-[11px] uppercase tracking-wider font-mono">
+                        <th className="py-2 px-3 w-8">★</th>
                         <th className="py-2 px-3">Finding ID</th>
                         <th className="py-2 px-3">Type</th>
                         <th className="py-2 px-3">Value</th>
@@ -661,6 +803,7 @@ export default function InvestigationWorkspacePage() {
                       {filteredCategoryFindings.map((finding) => {
                         const isSelected =
                           selectedFinding?.finding_id === finding.finding_id;
+                        const isStarred = starredFindingIds.has(finding.finding_id);
 
                         return (
                           <tr
@@ -672,6 +815,28 @@ export default function InvestigationWorkspacePage() {
                                 : "hover:bg-subtle/60"
                             }`}
                           >
+                            <td className="py-2 px-3 text-center">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleToggleStarFinding(finding.finding_id);
+                                }}
+                                className={`p-1 rounded transition-colors ${
+                                  isStarred
+                                    ? "text-yellow-400 hover:text-yellow-300"
+                                    : "text-text-muted hover:text-text-primary"
+                                }`}
+                                title={isStarred ? "Unstar finding" : "Star finding"}
+                                aria-label={isStarred ? "Unstar finding" : "Star finding"}
+                              >
+                                <Star
+                                  className={`w-3.5 h-3.5 ${
+                                    isStarred ? "fill-yellow-400" : ""
+                                  }`}
+                                />
+                              </button>
+                            </td>
                             <td className="py-2 px-3 font-mono text-accent font-medium">
                               {finding.finding_id}
                             </td>
@@ -721,6 +886,8 @@ export default function InvestigationWorkspacePage() {
         finding={selectedFinding}
         evidenceList={evidenceList}
         loading={loadingEvidence}
+        isStarred={selectedFinding ? starredFindingIds.has(selectedFinding.finding_id) : false}
+        onToggleStar={selectedFinding ? () => handleToggleStarFinding(selectedFinding.finding_id) : undefined}
       />
 
       {/* Delete Investigation Dialog */}
@@ -733,6 +900,12 @@ export default function InvestigationWorkspacePage() {
         confirmVariant="danger"
         isProcessing={isDeleting}
         onConfirm={handleDeleteInvestigation}
+      />
+
+      {/* Keyboard Shortcuts Cheat Sheet Modal */}
+      <ShortcutsModal
+        isOpen={isShortcutsOpen}
+        onClose={() => setIsShortcutsOpen(false)}
       />
     </div>
   );

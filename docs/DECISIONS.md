@@ -83,5 +83,18 @@ This file tracks foundational and operational decisions for the OSINT Investigat
 - **Reason:** Eliminates React runtime `removeChild` DOM reconciliation crashes triggered when Cytoscape modifies elements inside unmounting React containers. Ensures the accessible table view toggles instantly without remounting the canvas. Guarantees that analyst AI summaries provide comprehensive domain narrative breakdowns with direct verifiable finding citations (`[F-XXXXXX]`) rather than sparse 0-finding placeholders.
 - **Alternatives considered:** Recreating Cytoscape instance on every table view toggle (slow, state loss, causes DOM detachment crashes), sparse summary text without breakdown.
 
+---
+
+## ADR-010: Multi-Format Data Exports, Passive Security Posture Evaluation, Analyst Bookmarks, and Accessible Shortcuts
+
+- **Date:** 2026-10-06
+- **Decision:**
+  1. Add client-side CSV spreadsheet export (RFC 4180 compliant) and complete structured JSON archive export (`exportFindingsToCSV`, `exportInvestigationToJSON`) directly from the investigation header.
+  2. Implement an evidence-grounded Passive Security Posture Card (`SecurityPostureCard`) that evaluates DMARC policies (`p=reject`, `p=quarantine`, `p=none`), SPF configurations (`-all`, `~all`, permissive), nameserver single-point-of-failure (SPOF) risks, and CDN/cloud shielding without initiating any active port scans or unauthorized network probes (strictly passive per Rule S1).
+  3. Introduce an analyst bookmark ("Star") system with `localStorage` persistence, prioritizing starred entities in findings tables, rendering gold highlight rings (`#E3B341`) in the Cytoscape graph canvas without re-triggering layout runs, and offering an accessible Keyboard Shortcuts modal (`?`, `1`-`7`, `Esc`, `R`, `E`).
+- **Reason:** Dramatically enhances analyst workflow speed, evidence triaging, offline spreadsheet consumption, and passive risk posture detection while maintaining strict adherence to safety rules S1 (strictly passive) and WCAG 2.2 AA accessibility standards.
+- **Alternatives considered:** Server-side CSV/JSON compilation endpoints (unnecessary network roundtrip for data already in browser state), active port scanners/vulnerability scanners (violates Rule S1).
+
+
 
 

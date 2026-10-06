@@ -11,6 +11,7 @@ import {
   ZoomIn,
   ZoomOut,
   Eye,
+  Star,
 } from "lucide-react";
 import { InvestigationGraphData } from "@/lib/api";
 import { ENTITY_STYLES } from "@/lib/entityStyle";
@@ -21,6 +22,8 @@ interface GraphViewProps {
   graphData: InvestigationGraphData;
   onSelectEntity: (entityId: number, findingId: string) => void;
   selectedEntityId?: number | null;
+  starredFindingIds?: Set<string>;
+  onToggleStarFinding?: (findingId: string) => void;
   className?: string;
 }
 
@@ -43,6 +46,8 @@ export function GraphView({
   graphData,
   onSelectEntity,
   selectedEntityId,
+  starredFindingIds,
+  onToggleStarFinding,
   className = "",
 }: GraphViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -193,6 +198,16 @@ export function GraphView({
           },
         },
         {
+          selector: "node.starred",
+          style: {
+            "border-width": 3.5,
+            "border-color": "#E3B341",
+            "text-border-color": "#E3B341",
+            "text-border-width": 1.5,
+            "z-index": 500,
+          },
+        },
+        {
           selector: "node:selected",
           style: {
             label: "data(fullLabel)",
@@ -225,6 +240,15 @@ export function GraphView({
           style: {
             opacity: 1,
             "z-index": 100,
+          },
+        },
+        {
+          selector: "node.starred",
+          style: {
+            "border-width": 3,
+            "border-color": "#E3B341",
+            "border-opacity": 1,
+            "z-index": 120,
           },
         },
         {
@@ -324,6 +348,7 @@ export function GraphView({
             displayLabel: formatNodeDisplayLabel(n.data.type, n.data.label),
             fullLabel: n.data.label,
           },
+          classes: "",
         })),
         ...filteredEdges.map((e) => ({
           group: "edges" as const,
@@ -386,6 +411,20 @@ export function GraphView({
     }
   }, [filteredNodes, filteredEdges, layoutName]);
 
+  // 2b. Sync starred class onto Cytoscape nodes dynamically without re-running layout
+  useEffect(() => {
+    if (!cyRef.current) return;
+    const cy = cyRef.current;
+    cy.nodes().each((node) => {
+      const fId = node.data("findingId");
+      if (fId && starredFindingIds?.has(fId)) {
+        node.addClass("starred");
+      } else {
+        node.removeClass("starred");
+      }
+    });
+  }, [starredFindingIds, filteredNodes]);
+
   // 3. Highlight selected node and dim unrelated elements
   useEffect(() => {
     if (!cyRef.current) return;
@@ -412,6 +451,20 @@ export function GraphView({
       );
     }
   }, [selectedEntityId]);
+
+  // Sync starred nodes without full relayout
+  useEffect(() => {
+    if (!cyRef.current) return;
+    const cy = cyRef.current;
+    cy.nodes().each((node: any) => {
+      const fid = node.data("findingId");
+      if (starredFindingIds?.has(fid)) {
+        node.addClass("starred");
+      } else {
+        node.removeClass("starred");
+      }
+    });
+  }, [starredFindingIds]);
 
   // 4. Resize and fit when returning from table alternative
   useEffect(() => {
@@ -637,6 +690,7 @@ export function GraphView({
             <table className="w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="bg-canvas border-b border-border text-text-muted text-[11px] uppercase tracking-wider font-mono">
+                  <th className="py-2.5 px-3 w-8">★</th>
                   <th className="py-2.5 px-3">Finding ID</th>
                   <th className="py-2.5 px-3">Entity Type</th>
                   <th className="py-2.5 px-3">Observed Value</th>
@@ -650,6 +704,7 @@ export function GraphView({
                     (e) => e.data.source === n.data.id || e.data.target === n.data.id
                   );
                   const isSelected = selectedEntityId === n.data.entityId;
+                  const isStarred = starredFindingIds?.has(n.data.findingId);
 
                   return (
                     <tr
@@ -668,6 +723,24 @@ export function GraphView({
                           : "hover:bg-subtle/60"
                       }`}
                     >
+                      <td className="py-2 px-3 text-center">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onToggleStarFinding?.(n.data.findingId);
+                          }}
+                          className={`p-1 rounded transition-colors ${
+                            isStarred
+                              ? "text-yellow-400 hover:text-yellow-300"
+                              : "text-text-muted hover:text-text-primary"
+                          }`}
+                          title={isStarred ? "Unstar finding" : "Star finding"}
+                          aria-label={isStarred ? "Unstar finding" : "Star finding"}
+                        >
+                          <Star className={`w-3.5 h-3.5 ${isStarred ? "fill-yellow-400" : ""}`} />
+                        </button>
+                      </td>
                       <td className="py-2 px-3 font-mono text-accent font-medium">
                         {n.data.findingId}
                       </td>

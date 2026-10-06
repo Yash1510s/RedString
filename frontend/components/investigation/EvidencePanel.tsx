@@ -3,17 +3,22 @@
 import React, { useState } from "react";
 import { FindingItem, EvidenceRecord } from "@/lib/api";
 import { ConfidenceBadge } from "@/components/ui/ConfidenceBadge";
+import { Star } from "lucide-react";
 
 interface EvidencePanelProps {
   finding: FindingItem | null;
   evidenceList: EvidenceRecord[];
   loading?: boolean;
+  isStarred?: boolean;
+  onToggleStar?: () => void;
 }
 
 export const EvidencePanel: React.FC<EvidencePanelProps> = ({
   finding,
   evidenceList,
   loading = false,
+  isStarred = false,
+  onToggleStar,
 }) => {
   const [copiedId, setCopiedId] = useState<number | null>(null);
 
@@ -48,9 +53,28 @@ export const EvidencePanel: React.FC<EvidencePanelProps> = ({
       {/* Header */}
       <div className="p-3 border-b border-border bg-canvas">
         <div className="flex items-center justify-between mb-1.5">
-          <span className="font-mono text-xs font-semibold text-accent">
-            {finding.finding_id}
-          </span>
+          <div className="flex items-center gap-1.5">
+            <span className="font-mono text-xs font-semibold text-accent">
+              {finding.finding_id}
+            </span>
+            {onToggleStar && (
+              <button
+                type="button"
+                onClick={onToggleStar}
+                className="p-0.5 rounded hover:bg-subtle transition-colors"
+                title={isStarred ? "Unstar finding" : "Star finding"}
+                aria-label={isStarred ? "Unstar finding" : "Star finding"}
+              >
+                <Star
+                  className={`w-3.5 h-3.5 ${
+                    isStarred
+                      ? "text-yellow-400 fill-yellow-400"
+                      : "text-text-muted hover:text-text-primary"
+                  }`}
+                />
+              </button>
+            )}
+          </div>
           <ConfidenceBadge confidence={finding.confidence} showDetail={true} />
         </div>
         <h3 className="font-mono text-xs font-medium text-text-primary break-all">
