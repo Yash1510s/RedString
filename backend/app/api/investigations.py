@@ -48,8 +48,18 @@ async def create_investigation(
             detail="Investigation requires explicit confirmation of lawful purpose.",
         )
 
+    def strip_url_scheme(val: str | None) -> str:
+        if not val:
+            return ""
+        s = val.strip()
+        for scheme in ("https://", "http://", "ftp://"):
+            if s.lower().startswith(scheme):
+                s = s[len(scheme):]
+        s = s.split("/")[0].split("?")[0].split("#")[0].split(":")[0]
+        return s.strip()
+
     try:
-        clean_target = validate_target_domain(payload.target)
+        clean_target = validate_target_domain(strip_url_scheme(payload.target))
     except InvalidTargetError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -60,7 +70,7 @@ async def create_investigation(
     clean_official = None
     if payload.official_domain:
         try:
-            clean_official = validate_target_domain(payload.official_domain)
+            clean_official = validate_target_domain(strip_url_scheme(payload.official_domain))
         except InvalidTargetError as exc:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

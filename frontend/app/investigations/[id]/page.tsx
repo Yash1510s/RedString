@@ -219,7 +219,7 @@ export default function InvestigationWorkspacePage() {
   }, [id]);
 
   // Select finding row or graph node
-  const handleSelectFinding = async (finding: FindingItem) => {
+  const handleSelectFinding = useCallback(async (finding: FindingItem) => {
     setSelectedFinding(finding);
     try {
       setLoadingEvidence(true);
@@ -231,14 +231,48 @@ export default function InvestigationWorkspacePage() {
     } finally {
       setLoadingEvidence(false);
     }
-  };
+  }, [id]);
 
-  const handleSelectEntityFromGraph = (entityId: number, _findingId: string) => {
-    const match = findings.find((f) => f.entity_id === entityId);
-    if (match) {
-      handleSelectFinding(match);
-    }
-  };
+  const handleSelectEntityFromGraph = useCallback(
+    (entityId: number, findingId?: string) => {
+      // 1. Try matching by entity_id
+      let match = findings.find(
+        (f) => Number(f.entity_id) === Number(entityId)
+      );
+
+      // 2. Try matching by finding_id (e.g. F-000012)
+      if (!match && findingId) {
+        match = findings.find((f) => f.finding_id === findingId);
+      }
+
+      // 3. Fallback: retrieve from graphData nodes if findings list hasn't loaded or is filtered
+      if (!match && graphData) {
+        const gNode = graphData.nodes.find(
+          (n) =>
+            Number(n.data.entityId) === Number(entityId) ||
+            (findingId && n.data.findingId === findingId)
+        );
+        if (gNode) {
+          match = {
+            finding_id: gNode.data.findingId || (entityId ? `F-${entityId.toString().padStart(6, "0")}` : "F-000000"),
+            entity_id: Number(gNode.data.entityId || entityId),
+            type: gNode.data.type,
+            value: gNode.data.label,
+            confidence: "high",
+            attributes: gNode.data.attributes || {},
+            sources: ["Passive observation"],
+            evidence_count: 1,
+            first_seen: new Date().toISOString(),
+          };
+        }
+      }
+
+      if (match) {
+        handleSelectFinding(match);
+      }
+    },
+    [findings, graphData, handleSelectFinding]
+  );
 
   const handleSelectFindingById = (findingId: string) => {
     const match = findings.find((f) => f.finding_id === findingId);

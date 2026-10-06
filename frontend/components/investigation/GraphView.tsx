@@ -24,6 +24,21 @@ interface GraphViewProps {
   className?: string;
 }
 
+function formatNodeDisplayLabel(type: string, rawLabel: string): string {
+  if (!rawLabel) return "";
+  if (type === "certificate") {
+    const clean = rawLabel.replace(/^cert-/, "");
+    return `cert:${clean.slice(0, 6)}…`;
+  }
+  if (type === "ip") {
+    return rawLabel;
+  }
+  if (rawLabel.length > 20) {
+    return rawLabel.slice(0, 10) + "…" + rawLabel.slice(-8);
+  }
+  return rawLabel;
+}
+
 export function GraphView({
   graphData,
   onSelectEntity,
@@ -33,6 +48,12 @@ export function GraphView({
   const containerRef = useRef<HTMLDivElement>(null);
   const mountRef = useRef<HTMLDivElement | null>(null);
   const cyRef = useRef<Core | null>(null);
+
+  // Keep a stable ref for onSelectEntity callback so cy listener never becomes stale
+  const onSelectEntityRef = useRef(onSelectEntity);
+  useEffect(() => {
+    onSelectEntityRef.current = onSelectEntity;
+  }, [onSelectEntity]);
 
   const [layoutName, setLayoutName] = useState<"cose" | "concentric">("cose");
   const [searchTerm, setSearchTerm] = useState("");
@@ -135,12 +156,19 @@ export function GraphView({
         {
           selector: "node",
           style: {
-            label: "data(label)",
-            "font-family": "ui-monospace, monospace",
-            "font-size": "9px",
+            label: "data(displayLabel)",
+            "font-family": "ui-monospace, SFMono-Regular, Menlo, monospace",
+            "font-size": "9.5px",
             "text-valign": "bottom",
-            "text-margin-y": 4,
-            color: "#A7B0BD",
+            "text-margin-y": 5,
+            color: "#E2E8F0",
+            "text-background-color": "#0B0F17",
+            "text-background-opacity": 0.88,
+            "text-background-padding": "2px",
+            "text-background-shape": "roundrectangle",
+            "text-border-color": "#2D3748",
+            "text-border-width": 1,
+            "text-border-opacity": 0.8,
             "background-color": (ele: any) => {
               const type = ele.data("type") || "";
               return ENTITY_STYLES[type]?.color || "#999999";
@@ -167,10 +195,46 @@ export function GraphView({
         {
           selector: "node:selected",
           style: {
-            "border-width": 3,
-            "border-color": "#1B5FC4",
+            label: "data(fullLabel)",
+            "font-size": "11px",
             "font-weight": "bold",
+            "border-width": 3,
+            "border-color": "#388BFD",
             color: "#FFFFFF",
+            "text-background-opacity": 1,
+            "text-background-color": "#050811",
+            "text-border-color": "#388BFD",
+            "text-border-width": 1.5,
+            "z-index": 9999,
+          },
+        },
+        {
+          selector: "node.dimmed",
+          style: {
+            opacity: 0.25,
+          },
+        },
+        {
+          selector: "edge.dimmed",
+          style: {
+            opacity: 0.15,
+          },
+        },
+        {
+          selector: "node.highlighted",
+          style: {
+            opacity: 1,
+            "z-index": 100,
+          },
+        },
+        {
+          selector: "edge.highlighted",
+          style: {
+            opacity: 1,
+            width: 2.5,
+            "line-color": "#388BFD",
+            "target-arrow-color": "#388BFD",
+            "z-index": 100,
           },
         },
         {
@@ -193,8 +257,8 @@ export function GraphView({
           selector: "edge:selected",
           style: {
             width: 2.5,
-            "line-color": "#1B5FC4",
-            "target-arrow-color": "#1B5FC4",
+            "line-color": "#388BFD",
+            "target-arrow-color": "#388BFD",
           },
         },
       ],
@@ -204,13 +268,20 @@ export function GraphView({
       maxZoom: 3.5,
     });
 
-    cy.on("tap", "node", (evt: EventObject) => {
-      const node = evt.target;
+    const triggerNodeSelection = (node: any) => {
       const entityId = node.data("entityId");
       const findingId = node.data("findingId");
-      if (entityId) {
-        onSelectEntity(entityId, findingId);
+      if (entityId !== undefined && entityId !== null) {
+        onSelectEntityRef.current(Number(entityId), String(findingId || ""));
       }
+    };
+
+    cy.on("tap", "node", (evt: EventObject) => {
+      triggerNodeSelection(evt.target);
+    });
+
+    cy.on("select", "node", (evt: EventObject) => {
+      triggerNodeSelection(evt.target);
     });
 
     cyRef.current = cy;
@@ -236,7 +307,7 @@ export function GraphView({
       }
       mountRef.current = null;
     };
-  }, [onSelectEntity]);
+  }, []); // Run ONCE on mount
 
   // 2. Update Cytoscape elements and layout smoothly without tearing down the instance
   useEffect(() => {
@@ -248,7 +319,11 @@ export function GraphView({
       const elements: cytoscape.ElementDefinition[] = [
         ...filteredNodes.map((n) => ({
           group: "nodes" as const,
-          data: n.data,
+          data: {
+            ...n.data,
+            displayLabel: formatNodeDisplayLabel(n.data.type, n.data.label),
+            fullLabel: n.data.label,
+          },
         })),
         ...filteredEdges.map((e) => ({
           group: "edges" as const,
@@ -259,29 +334,79 @@ export function GraphView({
     });
 
     if (filteredNodes.length > 0) {
-      const layout = cy.layout({
-        name: layoutName,
-        animate: false,
-        padding: 40,
-      } as any);
+      let layoutConfig: any;
+      if (layoutName === "cose") {
+        layoutConfig = {
+          name: "cose",
+          animate: false,
+          padding: 60,
+          nodeRepulsion: (node: any) => {
+            const type = node.data("type");
+            if (type === "domain") return 24000;
+            if (type === "subdomain") return 16000;
+            return 9000;
+          },
+          idealEdgeLength: (edge: any) => {
+            const type = edge.data("type");
+            if (type === "RESOLVES_TO") return 110;
+            if (type === "ISSUED_FOR") return 130;
+            return 95;
+          },
+          edgeElasticity: () => 32,
+          nestingFactor: 1.2,
+          gravity: 0.18,
+          numIter: 1000,
+          initialTemp: 800,
+          coolingFactor: 0.95,
+          minTemp: 1.0,
+          componentSpacing: 100,
+        };
+      } else {
+        layoutConfig = {
+          name: "concentric",
+          animate: false,
+          padding: 60,
+          concentric: (node: any) => {
+            const type = node.data("type");
+            if (type === "domain") return 10;
+            if (type === "subdomain") return 7;
+            if (type === "ip") return 5;
+            if (type === "technology" || type === "repository") return 3;
+            return 1;
+          },
+          levelWidth: () => 2,
+          spacingFactor: 1.5,
+        };
+      }
+
+      const layout = cy.layout(layoutConfig);
       layout.run();
       cy.resize();
-      cy.fit(undefined, 40);
+      cy.fit(undefined, 50);
     }
   }, [filteredNodes, filteredEdges, layoutName]);
 
-  // 3. Highlight selected node
+  // 3. Highlight selected node and dim unrelated elements
   useEffect(() => {
-    if (!cyRef.current || !selectedEntityId) return;
+    if (!cyRef.current) return;
     const cy = cyRef.current;
-    cy.nodes().unselect();
-    const targetNode = cy.nodes().filter((n) => n.data("entityId") === selectedEntityId);
+    cy.elements().removeClass("dimmed highlighted");
+
+    if (selectedEntityId === undefined || selectedEntityId === null) {
+      cy.nodes().unselect();
+      return;
+    }
+
+    const targetNode = cy.nodes().filter((n) => Number(n.data("entityId")) === Number(selectedEntityId));
     if (targetNode.length > 0) {
       targetNode.select();
+      const neighborhood = targetNode.neighborhood().add(targetNode);
+      cy.elements().difference(neighborhood).addClass("dimmed");
+      neighborhood.addClass("highlighted");
       cy.animate(
         {
           center: { eles: targetNode },
-          zoom: Math.max(cy.zoom(), 1.0),
+          zoom: Math.max(cy.zoom(), 0.95),
         },
         { duration: 180 }
       );

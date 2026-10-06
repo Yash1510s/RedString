@@ -35,11 +35,22 @@ export default function NewInvestigationPage() {
     fetchRecent();
   }, []);
 
+  function sanitizeDomainInput(input: string): string {
+    let clean = input.trim();
+    // Strip scheme if user pasted a URL (e.g. https://www.xavier.ac.in/)
+    clean = clean.replace(/^[a-zA-Z]+:\/\//, "");
+    // Strip trailing path, query, hash
+    clean = clean.split("/")[0].split("?")[0].split("#")[0];
+    // Strip port if present
+    clean = clean.split(":")[0];
+    return clean.trim().toLowerCase();
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
 
-    const clean = target.trim();
+    const clean = sanitizeDomainInput(target);
     if (!clean) {
       setErrorMessage("Please enter a target domain.");
       return;
@@ -52,10 +63,15 @@ export default function NewInvestigationPage() {
 
     try {
       setIsSubmitting(true);
+      const cleanOfficial =
+        targetType === "company" && officialDomain.trim()
+          ? sanitizeDomainInput(officialDomain)
+          : null;
+
       const created = await createInvestigation({
         target: clean,
         target_type: targetType,
-        official_domain: targetType === "company" ? officialDomain.trim() : null,
+        official_domain: cleanOfficial,
         consent,
       });
 
