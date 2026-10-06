@@ -230,3 +230,35 @@ export async function deleteInvestigation(id: number | string): Promise<void> {
 export function getReportUrl(id: number | string): string {
   return `${API_BASE}/api/investigations/${id}/report`;
 }
+
+export async function createDemoInvestigation(): Promise<InvestigationItem> {
+  const res = await fetch(`${API_BASE}/api/investigations/demo`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  });
+  if (!res.ok) {
+    throw new Error(`Failed to create demo investigation: ${res.status}`);
+  }
+  return res.json();
+}
+
+export interface SystemStatusData {
+  version: string;
+  environment: string;
+  database: string;
+  ssrf_guard: string;
+  cache_ttl_hours: number;
+  integrations: Array<{
+    name: string;
+    status: string;
+    note: string;
+  }>;
+}
+
+export async function getSystemStatus(): Promise<SystemStatusData> {
+  const res = await fetch(`${API_BASE}/api/system`, { cache: "no-store" });
+  if (!res.ok) {
+    throw new Error(`Failed to load system status: ${res.status}`);
+  }
+  return res.json();
+}

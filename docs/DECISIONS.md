@@ -65,4 +65,13 @@ This file tracks foundational and operational decisions for the OSINT Investigat
 - **Reason:** Fulfills Spec Section 14 Phase 6 and `UI_SPEC.md §3.3 & §5.3`. Ensures screen readers and keyboard users can inspect all nodes and edges identically to canvas users without relying on visual graph rendering alone.
 - **Alternatives considered:** Canvas-only rendering (violates accessibility S11.7), SVG-only force graph (performance degraded with 300+ nodes).
 
+---
+
+## ADR-008: Read-Only System Diagnostics, Offline Demo Seeding, and Complete Route Hierarchy
+
+- **Date:** 2026-10-06
+- **Decision:** Implement a read-only diagnostics endpoint (`GET /api/system`) and frontend screen (`/settings`), an offline pre-correlated demo seeding endpoint (`POST /api/investigations/demo`) visibly labelled "Demo data", and a dedicated History management view (`/investigations`) with permanent delete capabilities.
+- **Reason:** Fulfills Spec Section 14 Phase 9 and `UI_SPEC.md §5.2 & §5.4`. Provides deterministic offline presentation capability without live network requests, satisfies Rule S10 labelling requirements, and gives investigators transparent insight into rate limits and security boundaries.
+- **Alternatives considered:** Live-only investigations (risks demo failure on conference networks), manual database seeding scripts.
+
 

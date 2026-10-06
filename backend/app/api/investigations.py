@@ -14,7 +14,8 @@ from app.core.orchestrator import orchestrator, stream_investigation_events
 from app.core.ssrf_guard import InvalidTargetError, validate_target_domain
 from app.correlation.engine import CorrelationEngine
 from app.db import get_db_session
-from app.models.db_models import AISummary, Entity, Evidence, Investigation, Relation
+from app.models.db_models import AISummary, CollectorRun, Entity, Evidence, Investigation, Relation
+from app.models.normalisation import utc_now
 from app.models.repository import InvestigationRepository
 from app.models.schemas import InvestigationCreate, InvestigationRead
 from app.reporting.report_generator import generate_html_report
@@ -81,6 +82,196 @@ async def create_investigation(
     background_tasks.add_task(orchestrator.run_investigation, inv.id, clean_target)
 
     return inv
+
+
+@router.post(
+    "/demo",
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a pre-seeded offline demo investigation",
+)
+async def create_demo_investigation(session: DbSession) -> dict[str, Any]:
+    """Seed a synthetic, pre-correlated demo investigation visibly labelled 'Demo data'."""
+    now = utc_now()
+    inv = Investigation(
+        target="demo-target.example (Demo Data)",
+        target_type="domain",
+        consent_given=True,
+        status="completed",
+        started_at=now,
+        finished_at=now,
+    )
+    session.add(inv)
+    await session.flush()
+
+    # Collector runs
+    collector_names = ["dns", "rdap", "ct", "tech", "github"]
+    for name in collector_names:
+        c_run = CollectorRun(
+            investigation_id=inv.id,
+            collector=name,
+            status="done",
+            started_at=now,
+            finished_at=now,
+        )
+        session.add(c_run)
+
+    # Entities
+    e_root = Entity(
+        investigation_id=inv.id,
+        type="domain",
+        value="demo-target.example",
+        attributes={"apex": True, "demo": True},
+        first_seen=now,
+    )
+    e_sub1 = Entity(
+        investigation_id=inv.id,
+        type="subdomain",
+        value="api.demo-target.example",
+        attributes={"parent": "demo-target.example", "demo": True},
+        first_seen=now,
+    )
+    e_sub2 = Entity(
+        investigation_id=inv.id,
+        type="subdomain",
+        value="auth.demo-target.example",
+        attributes={"parent": "demo-target.example", "demo": True},
+        first_seen=now,
+    )
+    e_ip1 = Entity(
+        investigation_id=inv.id,
+        type="ip",
+        value="93.184.216.34",
+        attributes={"cloud_provider": "Edgecast / Verizon", "asn": "AS15133"},
+        first_seen=now,
+    )
+    e_ip2 = Entity(
+        investigation_id=inv.id,
+        type="ip",
+        value="104.21.45.12",
+        attributes={"cloud_provider": "Cloudflare", "asn": "AS13335"},
+        first_seen=now,
+    )
+    e_ns = Entity(
+        investigation_id=inv.id,
+        type="nameserver",
+        value="ns1.demo-target.example",
+        attributes={"authoritative": True},
+        first_seen=now,
+    )
+    e_cert = Entity(
+        investigation_id=inv.id,
+        type="certificate",
+        value="demo-target.example SSL Certificate",
+        attributes={
+            "issuer": "Let's Encrypt",
+            "common_name": "demo-target.example",
+            "san_count": 3,
+            "wildcard": False,
+        },
+        first_seen=now,
+    )
+    e_tech1 = Entity(
+        investigation_id=inv.id,
+        type="technology",
+        value="Cloudflare CDN",
+        attributes={"category": "CDN / Reverse Proxy", "confidence": "high"},
+        first_seen=now,
+    )
+    e_tech2 = Entity(
+        investigation_id=inv.id,
+        type="technology",
+        value="Nginx 1.24",
+        attributes={"category": "Web Server", "version": "1.24.0"},
+        first_seen=now,
+    )
+    e_repo = Entity(
+        investigation_id=inv.id,
+        type="repository",
+        value="demo-target/client-portal",
+        attributes={"language": "TypeScript", "stars": 142, "license": "MIT"},
+        first_seen=now,
+    )
+
+    entities = [e_root, e_sub1, e_sub2, e_ip1, e_ip2, e_ns, e_cert, e_tech1, e_tech2, e_repo]
+    for e in entities:
+        session.add(e)
+    await session.flush()
+
+    # Evidence for each entity
+    for e in entities:
+        ev = Evidence(
+            investigation_id=inv.id,
+            entity_id=e.id,
+            source_name="synthetic-fixture",
+            source_ref=f"Demo proof for {e.value}",
+            raw={"sample": True, "value": e.value, "type": e.type},
+            collected_at=now,
+            collector_version="1.0.0-demo",
+        )
+        session.add(ev)
+
+    # Relations
+    r1 = Relation(investigation_id=inv.id, source_id=e_root.id, target_id=e_ip1.id, type="RESOLVES_TO", confidence="high")
+    r2 = Relation(investigation_id=inv.id, source_id=e_sub1.id, target_id=e_ip2.id, type="RESOLVES_TO", confidence="high")
+    r3 = Relation(investigation_id=inv.id, source_id=e_root.id, target_id=e_ns.id, type="SERVED_BY", confidence="high")
+    r4 = Relation(investigation_id=inv.id, source_id=e_root.id, target_id=e_cert.id, type="SECURED_BY", confidence="high")
+    r5 = Relation(investigation_id=inv.id, source_id=e_root.id, target_id=e_tech1.id, type="USES_TECH", confidence="medium")
+    r6 = Relation(investigation_id=inv.id, source_id=e_sub1.id, target_id=e_tech2.id, type="USES_TECH", confidence="high")
+    r7 = Relation(investigation_id=inv.id, source_id=e_root.id, target_id=e_repo.id, type="PUBLISHED_BY", confidence="medium")
+
+    relations = [r1, r2, r3, r4, r5, r6, r7]
+    for r in relations:
+        session.add(r)
+    await session.flush()
+
+    for r in relations:
+        ev = Evidence(
+            investigation_id=inv.id,
+            relation_id=r.id,
+            source_name="synthetic-fixture",
+            source_ref=f"Demo relationship proof for R-{r.id}",
+            raw={"relation": r.type, "source": r.source_id, "target": r.target_id},
+            collected_at=now,
+            collector_version="1.0.0-demo",
+        )
+        session.add(ev)
+
+    # AISummary
+    ai_summary = AISummary(
+        investigation_id=inv.id,
+        model="demo-fixture-v1",
+        prompt_version="1.0.0",
+        output={
+            "summary": "This is an offline demo investigation targeting demo-target.example. Passive reconnaissance identified 2 active subdomains, 2 public IP addresses terminating through Cloudflare and Edgecast, valid Let's Encrypt certificates, and an open-source client portal repository.",
+            "key_findings": [
+                {"claim": "Apex domain resolves to 93.184.216.34 (Edgecast)", "finding_ids": [f"F-{e_root.id:06d}", f"F-{e_ip1.id:06d}"]},
+                {"claim": "API subdomain routes through Cloudflare reverse proxy", "finding_ids": [f"F-{e_sub1.id:06d}", f"F-{e_ip2.id:06d}", f"F-{e_tech1.id:06d}"]},
+                {"claim": "Public client portal found on GitHub", "finding_ids": [f"F-{e_repo.id:06d}"]},
+            ],
+            "observations": [
+                {"observation": "Dual-infrastructure deployment with CDN fronting API services", "finding_ids": [f"F-{e_sub1.id:06d}", f"F-{e_tech1.id:06d}"]},
+                {"observation": "Nginx web server banner exposed on API endpoints", "finding_ids": [f"F-{e_tech2.id:06d}"]},
+            ],
+            "next_steps": [
+                "Verify Cloudflare origin certificates on backend endpoints.",
+                "Review public client portal repository for outdated client SDKs.",
+            ],
+            "limitations": [
+                "Demonstration dataset: all observed values are synthetic fixtures labelled per Rule S10.",
+                "RDAP personal contacts withheld per Rule S6.",
+            ],
+        },
+        validation_status="validated",
+    )
+    session.add(ai_summary)
+
+    await session.commit()
+    return {
+        "id": inv.id,
+        "target": inv.target,
+        "status": "completed",
+        "findings_count": len(entities),
+    }
 
 
 @router.get("", summary="List recent investigations")

@@ -35,6 +35,18 @@ export default function RootLayout({
               >
                 New Investigation
               </Link>
+              <Link
+                href="/investigations"
+                className="text-text-secondary hover:text-text-primary transition-colors py-1"
+              >
+                History
+              </Link>
+              <Link
+                href="/settings"
+                className="text-text-secondary hover:text-text-primary transition-colors py-1"
+              >
+                Settings
+              </Link>
             </nav>
           </div>
 

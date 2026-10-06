@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.health import router as health_router
 from app.api.investigations import router as investigations_router
+from app.api.system import router as system_router
 from app.config import settings
 from app.db import init_db
 from app.models import db_models as _db_models  # noqa: F401
@@ -43,6 +44,7 @@ app.add_middleware(
 # API Routers
 app.include_router(health_router, prefix="/api")
 app.include_router(investigations_router, prefix="/api")
+app.include_router(system_router, prefix="/api")
 
 
 @app.get("/")
