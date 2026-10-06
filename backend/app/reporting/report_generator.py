@@ -251,12 +251,89 @@ def generate_html_report(
     color: #52525b;
     margin-top: 20px;
   }}
+  .action-bar {{
+    position: sticky;
+    top: 0;
+    left: 0;
+    right: 0;
+    background: #18181b;
+    color: #ffffff;
+    padding: 10px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+    z-index: 1000;
+    margin: 0 -20px 24px -20px;
+  }}
+  .action-tag {{
+    font-size: 8.5pt;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+    color: #a1a1aa;
+    font-family: ui-monospace, monospace;
+  }}
+  .btn-print {{
+    background: #2563eb;
+    color: #ffffff;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    font-size: 10pt;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: background 0.15s ease;
+  }}
+  .btn-print:hover {{
+    background: #1d4ed8;
+  }}
+  .btn-close {{
+    background: #27272a;
+    color: #d4d4d8;
+    border: 1px solid #3f3f46;
+    padding: 8px 14px;
+    border-radius: 4px;
+    font-size: 10pt;
+    cursor: pointer;
+    margin-left: 8px;
+    transition: background 0.15s ease;
+  }}
+  .btn-close:hover {{
+    background: #3f3f46;
+  }}
+  .content-wrap {{
+    padding: 20px 30px;
+    max-width: 900px;
+    margin: 0 auto;
+  }}
   @media print {{
-    .no-print {{ display: none; }}
+    .no-print {{ display: none !important; }}
+    .content-wrap {{ padding: 0 !important; max-width: 100% !important; margin: 0 !important; }}
+    body {{ margin: 0; padding: 0; }}
   }}
 </style>
 </head>
 <body>
+
+<div class="action-bar no-print">
+  <div class="action-left">
+    <span class="action-tag">Official Audit Intelligence Report · INV-{inv.id:06d}</span>
+  </div>
+  <div class="action-right">
+    <button type="button" onclick="window.print()" class="btn-print">
+      🖨️ Print / Save as PDF
+    </button>
+    <button type="button" onclick="window.close()" class="btn-close">
+      ✕ Close
+    </button>
+  </div>
+</div>
+
+<div class="content-wrap">
 
 <div class="header">
   <div class="logo">RedString OSINT Report</div>
@@ -355,6 +432,7 @@ def generate_html_report(
 <h2>13. Scope, Limitations & Legal Notice</h2>
 <div class="disclaimer">
   <strong>Passive Reconnaissance Notice:</strong> This audit report was compiled solely through passive open-source intelligence methods. No intrusive penetration testing, vulnerability exploitation, port scanning, or authenticated API extraction was conducted. Observations represent public internet telemetry observed at the specified timestamps. Personal registrant data has been explicitly withheld in compliance with Safety Rule S6.
+</div>
 </div>
 
 </body>
