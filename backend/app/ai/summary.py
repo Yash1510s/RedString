@@ -299,35 +299,49 @@ async def generate_grounded_summary(
 
     try:
         if provider == "gemini":
-            model = settings.llm_model or "gemini-3.8-flash"
-            endpoint = (
-                f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-                f"?key={settings.llm_api_key}"
-            )
-            payload = {
-                "contents": [
-                    {
-                        "parts": [
-                            {"text": f"{SYSTEM_PROMPT}\n\n{user_prompt}"}
-                        ]
-                    }
-                ],
-                "generationConfig": {
-                    "temperature": 0.1,
-                    "responseMimeType": "application/json",
-                },
-            }
-            async with httpx.AsyncClient(timeout=35.0) as client:
-                res = await client.post(endpoint, json=payload)
-                if res.status_code != 200:
-                    logger.warning("Gemini generation failed (%s): %s", res.status_code, res.text)
-                    fallback = generate_template_summary(target, entities, counts)
-                    fallback["fallback_reason"] = f"Gemini API returned status {res.status_code}"
-                    return fallback
+            models_to_try = [
+                m for m in [settings.llm_model, "gemini-3.5-flash-lite", "gemini-flash-lite-latest"] if m
+            ]
+            models_to_try = list(dict.fromkeys(models_to_try))
 
-                res_json = res.json()
-                raw_text = res_json["candidates"][0]["content"]["parts"][0]["text"]
-                parsed = json.loads(raw_text)
+            parsed = None
+            last_err = ""
+            active_model = models_to_try[0]
+
+            async with httpx.AsyncClient(timeout=35.0) as client:
+                for candidate_model in models_to_try:
+                    endpoint = (
+                        f"https://generativelanguage.googleapis.com/v1beta/models/{candidate_model}:generateContent"
+                        f"?key={settings.llm_api_key}"
+                    )
+                    payload = {
+                        "contents": [
+                            {
+                                "parts": [
+                                    {"text": f"{SYSTEM_PROMPT}\n\n{user_prompt}"}
+                                ]
+                            }
+                        ],
+                        "generationConfig": {
+                            "temperature": 0.1,
+                            "responseMimeType": "application/json",
+                        },
+                    }
+                    res = await client.post(endpoint, json=payload)
+                    if res.status_code == 200:
+                        res_json = res.json()
+                        raw_text = res_json["candidates"][0]["content"]["parts"][0]["text"]
+                        parsed = json.loads(raw_text)
+                        active_model = candidate_model
+                        break
+                    else:
+                        last_err = f"Gemini model {candidate_model} returned {res.status_code}"
+                        logger.warning("%s: %s", last_err, res.text[:200])
+
+            if not parsed:
+                fallback = generate_template_summary(target, entities, counts)
+                fallback["fallback_reason"] = last_err
+                return fallback
 
         elif provider == "openai":
             model = settings.llm_model or "gpt-4o-mini"
@@ -395,7 +409,7 @@ async def generate_grounded_summary(
             return fallback
 
         parsed["is_fallback"] = False
-        parsed["model"] = f"{provider}:{settings.llm_model or 'default'}"
+        parsed["model"] = f"{provider}:{active_model if provider == 'gemini' else (settings.llm_model or 'default')}"
         parsed["prompt_version"] = PROMPT_VERSION
         parsed["generator"] = f"AI Grounded Summary ({provider.upper()})"
         return parsed
