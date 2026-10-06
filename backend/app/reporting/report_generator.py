@@ -284,6 +284,63 @@ def _render_security_posture_table(entities: list[Entity]) -> str:
     return "\n".join(html_rows)
 
 
+def _render_dns_matrix_table(evidence_list: list[Evidence]) -> str:
+    """Render verified DNS queries and records across A, MX, NS, TXT, and SOA."""
+    rows = []
+    seen = set()
+    for ev in evidence_list:
+        if ev.source_name == "dns" and isinstance(ev.raw, dict):
+            qtype = str(ev.raw.get("query_type", "DNS")).upper()
+            qname = str(ev.raw.get("query_name", ev.source_ref or ""))
+            answers = ev.raw.get("answers", [])
+            for ans in answers:
+                key = (qtype, qname, str(ans))
+                if key in seen:
+                    continue
+                seen.add(key)
+                badge = f"<span class='badge' style='background:#f4f4f5; font-family:monospace; font-weight:700;'>{qtype}</span>"
+                rows.append(
+                    f"<tr><td style='width:12%;'>{badge}</td>"
+                    f"<td class='code' style='width:28%;'>{qname}</td>"
+                    f"<td class='code' style='word-break:break-all;'>{ans}</td></tr>"
+                )
+    if not rows:
+        return "<tr><td colspan='3'>No explicit DNS query responses recorded.</td></tr>"
+    return "\n".join(rows[:40])
+
+
+def _render_http_headers_table(evidence_list: list[Evidence]) -> str:
+    """Render captured HTTP perimeter response headers and server telemetry."""
+    rows = []
+    for ev in evidence_list:
+        if ev.source_name == "tech" and isinstance(ev.raw, dict):
+            headers = ev.raw.get("headers", {})
+            if headers:
+                for h_name, h_val in sorted(headers.items()):
+                    is_security = h_name.lower() in (
+                        "server",
+                        "strict-transport-security",
+                        "content-security-policy",
+                        "x-frame-options",
+                        "x-content-type-options",
+                        "x-xss-protection",
+                    )
+                    pill = (
+                        "<span class='badge' style='background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe;'>SECURITY</span>"
+                        if is_security
+                        else "<span class='badge' style='background:#f4f4f5; color:#71717a;'>HEADER</span>"
+                    )
+                    rows.append(
+                        f"<tr><td class='code' style='font-weight:600; width:30%;'>{h_name}</td>"
+                        f"<td class='code' style='word-break:break-all;'>{h_val}</td>"
+                        f"<td style='text-align:center; width:15%;'>{pill}</td></tr>"
+                    )
+                break
+    if not rows:
+        return "<tr><td colspan='3'>No HTTP response headers captured during reconnaissance.</td></tr>"
+    return "\n".join(rows[:30])
+
+
 def generate_html_report(
     inv: Investigation,
     entities: list[Entity],
@@ -324,6 +381,8 @@ def generate_html_report(
         summary_data.get("observations", []),
     )
     security_posture_html = _render_security_posture_table(entities)
+    dns_matrix_html = _render_dns_matrix_table(evidence_list)
+    http_headers_html = _render_http_headers_table(evidence_list)
 
     raw_summary_text = summary_data.get("summary", "No summary available.")
     # Convert raw finding citations (F-000XXX) into styled badges
@@ -645,6 +704,20 @@ def generate_html_report(
   </tbody>
 </table>
 
+<h2>5c. Complete DNS Resource Record Matrix</h2>
+<table>
+  <thead>
+    <tr>
+      <th style="width:14%;">Record Type</th>
+      <th style="width:30%;">Target Query Name</th>
+      <th>Resolved Resource Data / Host</th>
+    </tr>
+  </thead>
+  <tbody>
+    {dns_matrix_html}
+  </tbody>
+</table>
+
 <h2>6. Certificate Findings</h2>
 <table>
   <tr><th>Serial</th><th>Issuer</th><th>Valid From</th><th>Valid Until</th><th>Wildcard</th></tr>
@@ -661,6 +734,20 @@ def generate_html_report(
 <table>
   <tr><th>Component</th><th>Type</th><th>Confidence</th></tr>
   {tech_html}
+</table>
+
+<h2>8b. HTTP Response Headers & Perimeter Telemetry</h2>
+<table>
+  <thead>
+    <tr>
+      <th style="width:30%;">Header Field</th>
+      <th>Observed Header Value</th>
+      <th style="text-align:center; width:15%;">Category</th>
+    </tr>
+  </thead>
+  <tbody>
+    {http_headers_html}
+  </tbody>
 </table>
 
 <h2>9. Public Repositories & Key Associated People</h2>
