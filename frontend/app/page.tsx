@@ -55,28 +55,41 @@ export default function NewInvestigationPage() {
     e.preventDefault();
     setErrorMessage(null);
 
-    const clean = sanitizeDomainInput(target);
-    if (!clean) {
-      setErrorMessage("Please enter a target domain.");
-      return;
-    }
-
     if (!consent) {
       setErrorMessage("You must confirm lawful purpose consent to initiate passive investigation.");
       return;
     }
 
+    let scanTarget = sanitizeDomainInput(target);
+    const cleanOfficial = officialDomain.trim() ? sanitizeDomainInput(officialDomain) : null;
+
+    if (targetType === "company") {
+      if (cleanOfficial && cleanOfficial.includes(".")) {
+        // If official domain is provided (e.g. jio.com), that is the target domain to scan
+        scanTarget = cleanOfficial;
+      } else if (scanTarget.includes(".")) {
+        // User typed the domain into the primary company box
+        scanTarget = scanTarget;
+      } else {
+        setErrorMessage(
+          "For company investigations, please enter the official web domain (e.g. jio.com) so passive DNS and network collectors can query it."
+        );
+        return;
+      }
+    } else {
+      if (!scanTarget || !scanTarget.includes(".")) {
+        setErrorMessage("Please enter a valid public domain name (e.g. example.com).");
+        return;
+      }
+    }
+
     try {
       setIsSubmitting(true);
-      const cleanOfficial =
-        targetType === "company" && officialDomain.trim()
-          ? sanitizeDomainInput(officialDomain)
-          : null;
 
       const created = await createInvestigation({
-        target: clean,
+        target: scanTarget,
         target_type: targetType,
-        official_domain: cleanOfficial,
+        official_domain: cleanOfficial || scanTarget,
         consent,
       });
 
@@ -222,14 +235,15 @@ export default function NewInvestigationPage() {
           {targetType === "company" && (
             <div className="space-y-1.5">
               <label htmlFor="official-domain-input" className="block text-xs font-medium text-text-secondary">
-                Official Domain (Recommended for cross-referencing)
+                Company Web Domain (Required for DNS and network telemetry)
               </label>
               <input
                 id="official-domain-input"
                 type="text"
+                required
                 value={officialDomain}
                 onChange={(e) => setOfficialDomain(e.target.value)}
-                placeholder="e.g. example.com"
+                placeholder="e.g. jio.com"
                 className="w-full h-9 px-3 text-xs font-mono bg-canvas border border-border-default rounded-control text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
