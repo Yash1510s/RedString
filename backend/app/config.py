@@ -32,5 +32,11 @@ class Settings(BaseSettings):
     llm_model: str | None = None
     ollama_base_url: str = "http://localhost:11434"
 
+    @property
+    def allowed_origins(self) -> list[str]:
+        """Parsed list of allowed origins from frontend_origin."""
+        raw = [o.strip() for o in self.frontend_origin.split(",") if o.strip()]
+        return raw if raw else ["http://localhost:3000"]
+
 
 settings = Settings()
