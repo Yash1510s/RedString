@@ -56,4 +56,13 @@ This file tracks foundational and operational decisions for the OSINT Investigat
 - **Reason:** Fulfills core spec safety rules S2 & S3 and data model requirements (Sections 5.2, 5.3, 5.4). Guarantees that no collector can initiate unauthorized requests to private infrastructure or drop previous investigative evidence.
 - **Alternatives considered:** Blocking SSRF at the proxy level (unsupported in zero-setup local deployments), destructive entity replacement (violates auditability).
 
+---
+
+## ADR-007: Interactive Cytoscape Relationship Canvas and Accessible Table Alternative
+
+- **Date:** 2026-10-06
+- **Decision:** Implement interactive Cytoscape.js graph canvas (`GraphView`) with Okabe-Ito colour-blind safe palette, distinct geometric shapes per entity type, dynamic Next.js client-side rendering (`ssr: false`), layout toggling (Force/Concentric), PNG export, and an integrated Accessible Table Alternative adhering to WCAG 2.2 AA.
+- **Reason:** Fulfills Spec Section 14 Phase 6 and `UI_SPEC.md §3.3 & §5.3`. Ensures screen readers and keyboard users can inspect all nodes and edges identically to canvas users without relying on visual graph rendering alone.
+- **Alternatives considered:** Canvas-only rendering (violates accessibility S11.7), SVG-only force graph (performance degraded with 300+ nodes).
+
 

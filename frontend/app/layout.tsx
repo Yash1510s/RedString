@@ -48,6 +48,26 @@ export default function RootLayout({
 
         {/* Main Application Canvas */}
         <main className="flex-1 flex flex-col overflow-hidden">{children}</main>
+
+        {/* Global Quiet Footer per UI_SPEC.md §4 */}
+        <footer className="h-8 border-t border-border bg-surface px-4 flex items-center justify-between shrink-0 text-[11px] text-text-muted font-mono">
+          <div className="flex items-center gap-3">
+            <Link href="/legal/acceptable-use" className="hover:text-text-primary transition-colors">
+              Acceptable use
+            </Link>
+            <span>·</span>
+            <Link href="/legal/privacy" className="hover:text-text-primary transition-colors">
+              Privacy
+            </Link>
+            <span>·</span>
+            <Link href="/legal/terms" className="hover:text-text-primary transition-colors">
+              Terms
+            </Link>
+          </div>
+          <div className="text-[10px] text-text-muted">
+            RedString v1.0.0 • Strict Provenance
+          </div>
+        </footer>
       </body>
     </html>
   );

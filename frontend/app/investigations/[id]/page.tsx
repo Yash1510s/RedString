@@ -1,45 +1,112 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
-import { useParams } from "next/navigation";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import dynamic from "next/dynamic";
+import {
+  FileText,
+  Trash2,
+  RefreshCw,
+  Search,
+  ExternalLink,
+  ChevronRight,
+  Shield,
+  Layers,
+  Sparkles,
+} from "lucide-react";
+
 import {
   getInvestigation,
   listFindings,
   getEntityEvidence,
   getEventStreamUrl,
+  getInvestigationGraph,
+  getInvestigationSummary,
+  regenerateInvestigationSummary,
+  deleteInvestigation,
+  getReportUrl,
   InvestigationItem,
   FindingItem,
   EvidenceRecord,
+  InvestigationGraphData,
+  InvestigationSummaryData,
 } from "@/lib/api";
 import { CollectorProgress, CollectorState } from "@/components/investigation/CollectorProgress";
 import { EvidencePanel } from "@/components/investigation/EvidencePanel";
+import { SummaryCard } from "@/components/investigation/SummaryCard";
 import { ConfidenceBadge } from "@/components/ui/ConfidenceBadge";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+
+// Dynamically import Cytoscape GraphView to ensure zero SSR hydration friction
+const GraphView = dynamic(
+  () =>
+    import("@/components/investigation/GraphView").then((mod) => mod.GraphView),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex-1 flex items-center justify-center p-8 text-xs text-text-muted bg-canvas">
+        Loading Cytoscape relationship canvas...
+      </div>
+    ),
+  }
+);
+
+type WorkspaceTab =
+  | "overview"
+  | "graph"
+  | "findings"
+  | "certificates"
+  | "technologies"
+  | "repositories"
+  | "summary";
 
 export default function InvestigationWorkspacePage() {
   const params = useParams();
   const id = params.id as string;
+  const router = useRouter();
+  const searchParams = useSearchParams();
 
+  // Navigation tab from URL or default
+  const activeTab = (searchParams.get("tab") as WorkspaceTab) || "overview";
+
+  const setTab = (tab: WorkspaceTab) => {
+    const nextParams = new URLSearchParams(searchParams.toString());
+    nextParams.set("tab", tab);
+    router.replace(`/investigations/${id}?${nextParams.toString()}`);
+  };
+
+  // State
   const [investigation, setInvestigation] = useState<InvestigationItem | null>(null);
   const [findings, setFindings] = useState<FindingItem[]>([]);
   const [selectedFinding, setSelectedFinding] = useState<FindingItem | null>(null);
   const [evidenceList, setEvidenceList] = useState<EvidenceRecord[]>([]);
   const [loadingEvidence, setLoadingEvidence] = useState(false);
 
+  const [graphData, setGraphData] = useState<InvestigationGraphData | null>(null);
+  const [summaryData, setSummaryData] = useState<InvestigationSummaryData | null>(null);
+  const [loadingSummary, setLoadingSummary] = useState(false);
+
   const [collectors, setCollectors] = useState<CollectorState[]>([
     { collector: "dns", status: "pending" },
+    { collector: "rdap", status: "pending" },
+    { collector: "ct", status: "pending" },
+    { collector: "tech", status: "pending" },
+    { collector: "github", status: "pending" },
   ]);
 
   const [loadingWorkspace, setLoadingWorkspace] = useState(true);
-  const [selectedTab, setSelectedTab] = useState<"dns" | "all">("dns");
+  const [tableSearch, setTableSearch] = useState("");
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
-  // Load initial investigation data
+  // Load all investigation data
   const loadData = useCallback(async () => {
     try {
       const inv = await getInvestigation(id);
       setInvestigation(inv);
 
-      // Map collectors
+      // Collectors
       if (inv.collectors && inv.collectors.length > 0) {
         setCollectors(
           inv.collectors.map((c) => ({
@@ -50,6 +117,7 @@ export default function InvestigationWorkspacePage() {
         );
       }
 
+      // Findings
       const fList = await listFindings(id);
       setFindings(fList);
 
@@ -63,6 +131,12 @@ export default function InvestigationWorkspacePage() {
           return prev;
         });
       }
+
+      // Graph data
+      getInvestigationGraph(id).then(setGraphData).catch(() => {});
+
+      // Summary data
+      getInvestigationSummary(id).then(setSummaryData).catch(() => {});
     } catch (err) {
       console.error("Failed to load workspace data:", err);
     } finally {
@@ -74,7 +148,7 @@ export default function InvestigationWorkspacePage() {
     loadData();
   }, [loadData]);
 
-  // Connect to SSE event stream for live progress
+  // Connect to SSE event stream
   useEffect(() => {
     if (!id) return;
     const eventSource = new EventSource(getEventStreamUrl(id));
@@ -102,17 +176,19 @@ export default function InvestigationWorkspacePage() {
                 : c
             )
           );
-          // Refresh findings
-          listFindings(id).then((f) => setFindings(f));
+          listFindings(id).then(setFindings);
+          getInvestigationGraph(id).then(setGraphData).catch(() => {});
         } else if (data.type === "investigation_complete") {
           setInvestigation((prev) =>
             prev ? { ...prev, status: data.status } : null
           );
-          listFindings(id).then((f) => setFindings(f));
+          listFindings(id).then(setFindings);
+          getInvestigationGraph(id).then(setGraphData).catch(() => {});
+          getInvestigationSummary(id).then(setSummaryData).catch(() => {});
           eventSource.close();
         }
       } catch {
-        // Ping or non-json heartbeat
+        // Heartbeat or ping
       }
     };
 
@@ -125,7 +201,7 @@ export default function InvestigationWorkspacePage() {
     };
   }, [id]);
 
-  // Handle finding row selection
+  // Select finding row or graph node
   const handleSelectFinding = async (finding: FindingItem) => {
     setSelectedFinding(finding);
     try {
@@ -140,23 +216,94 @@ export default function InvestigationWorkspacePage() {
     }
   };
 
-  const filteredFindings = findings.filter((f) => {
-    if (selectedTab === "dns") {
-      return (
-        f.type === "ip" ||
-        f.type === "nameserver" ||
-        f.type === "mail_provider" ||
-        f.attributes?.spf_record ||
-        f.attributes?.dmarc_record
+  const handleSelectEntityFromGraph = (entityId: number, _findingId: string) => {
+    const match = findings.find((f) => f.entity_id === entityId);
+    if (match) {
+      handleSelectFinding(match);
+    }
+  };
+
+  const handleSelectFindingById = (findingId: string) => {
+    const match = findings.find((f) => f.finding_id === findingId);
+    if (match) {
+      handleSelectFinding(match);
+    }
+  };
+
+  // Regenerate summary
+  const handleRegenerateSummary = async () => {
+    setLoadingSummary(true);
+    try {
+      const regenerated = await regenerateInvestigationSummary(id);
+      setSummaryData(regenerated);
+    } catch (err) {
+      console.error("Failed to regenerate summary:", err);
+    } finally {
+      setLoadingSummary(false);
+    }
+  };
+
+  // Delete investigation
+  const handleDeleteInvestigation = async () => {
+    try {
+      setIsDeleting(true);
+      await deleteInvestigation(id);
+      router.push("/");
+    } catch (err) {
+      console.error("Failed to delete investigation:", err);
+      setIsDeleting(false);
+      setIsDeleteDialogOpen(false);
+    }
+  };
+
+  // Filter findings for category tabs
+  const filteredCategoryFindings = useMemo(() => {
+    let list = findings;
+
+    if (activeTab === "certificates") {
+      list = findings.filter((f) => f.type === "certificate");
+    } else if (activeTab === "technologies") {
+      list = findings.filter((f) => f.type === "technology");
+    } else if (activeTab === "repositories") {
+      list = findings.filter((f) => f.type === "repository");
+    }
+
+    if (tableSearch.trim()) {
+      const q = tableSearch.toLowerCase();
+      list = list.filter(
+        (f) =>
+          f.value.toLowerCase().includes(q) ||
+          f.finding_id.toLowerCase().includes(q) ||
+          f.type.toLowerCase().includes(q)
       );
     }
-    return true;
-  });
+
+    return list;
+  }, [findings, activeTab, tableSearch]);
+
+  // Aggregate category counts for tab badges
+  const counts = useMemo(() => {
+    const map: Record<string, number> = {
+      subdomains: 0,
+      ips: 0,
+      certificates: 0,
+      technologies: 0,
+      repositories: 0,
+    };
+    findings.forEach((f) => {
+      if (f.type === "subdomain") map.subdomains++;
+      else if (f.type === "ip") map.ips++;
+      else if (f.type === "certificate") map.certificates++;
+      else if (f.type === "technology") map.technologies++;
+      else if (f.type === "repository") map.repositories++;
+    });
+    return map;
+  }, [findings]);
 
   if (loadingWorkspace && !investigation) {
     return (
-      <div className="flex-1 flex items-center justify-center p-8 text-xs text-text-muted animate-pulse">
-        Initializing investigation workspace...
+      <div className="flex-1 flex items-center justify-center p-8 text-xs text-text-muted animate-pulse font-mono">
+        Loading investigation workspace...
       </div>
     );
   }
@@ -166,11 +313,11 @@ export default function InvestigationWorkspacePage() {
       {/* Central Investigation Workspace */}
       <div className="flex-1 flex flex-col overflow-hidden bg-canvas">
         {/* Workspace Top Header */}
-        <div className="p-3 border-b border-border bg-surface flex flex-wrap items-center justify-between gap-3">
+        <div className="p-3 border-b border-border bg-surface flex flex-wrap items-center justify-between gap-3 shrink-0">
           <div className="flex items-center gap-3">
             <Link
               href="/"
-              className="text-xs text-text-muted hover:text-text-primary font-mono"
+              className="text-xs text-text-muted hover:text-text-primary font-mono transition-colors"
             >
               ← Back
             </Link>
@@ -195,117 +342,301 @@ export default function InvestigationWorkspacePage() {
                   {investigation?.status}
                 </span>
               </div>
-              <p className="text-[11px] text-text-muted mt-0.5">
-                Target Type: <span className="capitalize">{investigation?.target_type}</span> • Started:{" "}
-                {investigation?.created_at ? new Date(investigation.created_at).toUTCString() : "Just now"}
+              <p className="text-[11px] text-text-muted mt-0.5 font-mono">
+                Target: <span className="capitalize">{investigation?.target_type}</span> • Started:{" "}
+                {investigation?.created_at
+                  ? new Date(investigation.created_at).toUTCString()
+                  : "Just now"}
               </p>
             </div>
           </div>
 
+          {/* Header Action Buttons */}
           <div className="flex items-center gap-2">
             <button
+              type="button"
               onClick={loadData}
-              className="px-2.5 py-1 text-xs font-mono rounded-control border border-border-default bg-canvas hover:bg-subtle text-text-secondary"
-              title="Refresh findings"
+              className="px-2.5 py-1 text-xs font-mono rounded-control border border-border-default hover:bg-subtle text-text-secondary flex items-center gap-1.5 transition-colors"
+              title="Refresh findings and graph"
             >
-              ↻ Refresh
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Refresh</span>
+            </button>
+
+            <a
+              href={getReportUrl(id)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-2.5 py-1 text-xs font-mono rounded-control bg-accent text-accent-fg hover:opacity-90 flex items-center gap-1.5 transition-colors"
+              title="Open audit-ready printable report in new tab"
+            >
+              <FileText className="w-3.5 h-3.5" />
+              <span>Export Report</span>
+              <ExternalLink className="w-3 h-3 opacity-70" />
+            </a>
+
+            <button
+              type="button"
+              onClick={() => setIsDeleteDialogOpen(true)}
+              className="p-1.5 text-text-muted hover:text-danger-fg hover:bg-danger-bg rounded-control transition-colors"
+              title="Delete investigation (Privacy control)"
+              aria-label="Delete investigation"
+            >
+              <Trash2 className="w-4 h-4" />
             </button>
           </div>
         </div>
 
-        {/* Scrollable Center Pane */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {/* Real-time Collector Progress Strip */}
+        {/* Real-time Collector Progress Strip */}
+        <div className="p-3 border-b border-border bg-surface shrink-0">
           <CollectorProgress collectors={collectors} />
+        </div>
 
-          {/* Findings Filter Tabs */}
-          <div className="flex items-center justify-between border-b border-border">
-            <div className="flex gap-2">
+        {/* Tab Bar with Counts */}
+        <div className="flex items-center px-3 border-b border-border bg-surface shrink-0 overflow-x-auto">
+          {[
+            { id: "overview", label: "Overview" },
+            {
+              id: "graph",
+              label: `Graph (${graphData?.meta.nodeCount || findings.length})`,
+            },
+            { id: "findings", label: `Findings (${findings.length})` },
+            {
+              id: "certificates",
+              label: `Certificates (${counts.certificates})`,
+            },
+            {
+              id: "technologies",
+              label: `Technologies (${counts.technologies})`,
+            },
+            {
+              id: "repositories",
+              label: `Repositories (${counts.repositories})`,
+            },
+            { id: "summary", label: "AI Summary" },
+          ].map((tab) => {
+            const isActive = activeTab === tab.id;
+            return (
               <button
-                onClick={() => setSelectedTab("dns")}
-                className={`py-2 px-3 text-xs font-medium border-b-2 transition-colors ${
-                  selectedTab === "dns"
-                    ? "border-accent text-accent"
+                key={tab.id}
+                type="button"
+                onClick={() => setTab(tab.id as WorkspaceTab)}
+                className={`py-2 px-3 text-xs font-medium border-b-2 whitespace-nowrap transition-colors ${
+                  isActive
+                    ? "border-accent text-accent font-semibold"
                     : "border-transparent text-text-muted hover:text-text-primary"
                 }`}
               >
-                DNS Records ({filteredFindings.length})
+                {tab.label}
               </button>
-              <button
-                onClick={() => setSelectedTab("all")}
-                className={`py-2 px-3 text-xs font-medium border-b-2 transition-colors ${
-                  selectedTab === "all"
-                    ? "border-accent text-accent"
-                    : "border-transparent text-text-muted hover:text-text-primary"
-                }`}
-              >
-                All Findings ({findings.length})
-              </button>
-            </div>
-            <div className="text-[11px] text-text-muted font-mono">
-              Total Entities Observed: {findings.length}
-            </div>
-          </div>
+            );
+          })}
+        </div>
 
-          {/* Dense Findings Table */}
-          {filteredFindings.length === 0 ? (
-            <div className="p-12 text-center text-xs text-text-muted border border-dashed border-border-default rounded-panel bg-surface">
-              {investigation?.status === "running"
-                ? "Querying DNS authoritative resolvers... Findings will populate automatically."
-                : "No DNS records observed for this target."}
-            </div>
-          ) : (
-            <div className="border border-border rounded-panel bg-surface overflow-hidden">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="bg-canvas border-b border-border text-text-muted text-[11px] uppercase tracking-wider">
-                    <th className="py-2.5 px-3 font-medium">Finding ID</th>
-                    <th className="py-2.5 px-3 font-medium">Category</th>
-                    <th className="py-2.5 px-3 font-medium">Observed Value</th>
-                    <th className="py-2.5 px-3 font-medium">Confidence</th>
-                    <th className="py-2.5 px-3 font-medium">Source</th>
-                    <th className="py-2.5 px-3 font-medium text-right">Evidence</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border-subtle">
-                  {filteredFindings.map((finding) => {
-                    const isSelected = selectedFinding?.finding_id === finding.finding_id;
+        {/* Main Tab View Content */}
+        <div className="flex-1 overflow-hidden flex flex-col">
+          {/* TAB 1: OVERVIEW */}
+          {activeTab === "overview" && (
+            <div className="flex-1 overflow-y-auto p-4 space-y-5">
+              {/* Count Metric Tiles */}
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                {[
+                  { label: "Subdomains", val: counts.subdomains },
+                  { label: "IP Addresses", val: counts.ips },
+                  { label: "Certificates", val: counts.certificates },
+                  { label: "Technologies", val: counts.technologies },
+                  { label: "Repositories", val: counts.repositories },
+                ].map((tile) => (
+                  <div
+                    key={tile.label}
+                    className="p-3 bg-surface border border-border rounded-panel"
+                  >
+                    <div className="text-[11px] font-mono text-text-muted uppercase">
+                      {tile.label}
+                    </div>
+                    <div className="text-xl font-mono font-semibold text-text-primary mt-1">
+                      {tile.val}
+                    </div>
+                  </div>
+                ))}
+              </div>
 
-                    return (
-                      <tr
-                        key={finding.finding_id}
-                        onClick={() => handleSelectFinding(finding)}
-                        className={`cursor-pointer transition-colors ${
-                          isSelected
-                            ? "bg-selected border-l-2 border-l-accent"
-                            : "hover:bg-subtle/60"
-                        }`}
-                      >
-                        <td className="py-2 px-3 font-mono text-accent font-medium">
-                          {finding.finding_id}
-                        </td>
-                        <td className="py-2 px-3">
-                          <span className="inline-block px-1.5 py-0.5 rounded text-[10px] uppercase font-mono bg-canvas border border-border-subtle text-text-secondary">
-                            {finding.type}
-                          </span>
-                        </td>
-                        <td className="py-2 px-3 font-mono font-medium text-text-primary break-all">
-                          {finding.value}
-                        </td>
-                        <td className="py-2 px-3">
-                          <ConfidenceBadge confidence={finding.confidence} />
-                        </td>
-                        <td className="py-2 px-3 text-text-secondary font-mono text-[11px]">
-                          {finding.sources.join(", ")}
-                        </td>
-                        <td className="py-2 px-3 text-right font-mono text-text-muted">
-                          {finding.evidence_count} proofs
-                        </td>
+              {/* Summary Card Preview */}
+              <SummaryCard
+                summaryData={summaryData}
+                onSelectFindingId={handleSelectFindingById}
+                onRegenerate={handleRegenerateSummary}
+                loading={loadingSummary}
+              />
+
+              {/* Collectors Details Table */}
+              <div className="bg-surface border border-border rounded-panel p-4 space-y-3">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-text-muted font-mono">
+                  Collection Execution Trail
+                </h3>
+                <div className="border border-border-subtle rounded-panel overflow-hidden">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-canvas border-b border-border text-text-muted text-[11px] uppercase font-mono">
+                        <th className="py-2 px-3">Collector</th>
+                        <th className="py-2 px-3">Status</th>
+                        <th className="py-2 px-3">Duration</th>
+                        <th className="py-2 px-3">Entities</th>
+                        <th className="py-2 px-3">Error / Note</th>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                    </thead>
+                    <tbody className="divide-y divide-border-subtle font-mono text-xs">
+                      {collectors.map((col) => (
+                        <tr key={col.collector} className="hover:bg-subtle/50">
+                          <td className="py-2 px-3 font-semibold uppercase text-text-primary">
+                            {col.collector}
+                          </td>
+                          <td className="py-2 px-3 capitalize">
+                            <span
+                              className={`px-1.5 py-0.5 rounded-xs text-[10px] ${
+                                col.status === "done"
+                                  ? "bg-success-bg text-success-fg"
+                                  : col.status === "failed"
+                                  ? "bg-danger-bg text-danger-fg"
+                                  : col.status === "running"
+                                  ? "bg-info-bg text-accent"
+                                  : "bg-canvas text-text-muted"
+                              }`}
+                            >
+                              {col.status}
+                            </span>
+                          </td>
+                          <td className="py-2 px-3 text-text-secondary">
+                            {col.duration_ms ? `${col.duration_ms} ms` : "—"}
+                          </td>
+                          <td className="py-2 px-3 text-text-secondary">
+                            {col.count ?? "—"}
+                          </td>
+                          <td className="py-2 px-3 text-danger-fg text-[11px]">
+                            {col.error || "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 2: CYTOSCAPE GRAPH */}
+          {activeTab === "graph" && (
+            <div className="flex-1 flex flex-col overflow-hidden relative">
+              {graphData ? (
+                <GraphView
+                  graphData={graphData}
+                  onSelectEntity={handleSelectEntityFromGraph}
+                  selectedEntityId={selectedFinding?.entity_id}
+                />
+              ) : (
+                <div className="flex-1 flex items-center justify-center p-8 text-xs text-text-muted font-mono animate-pulse">
+                  Correlating entity graph...
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 3, 4, 5, 6: FINDINGS & CATEGORY TABLES */}
+          {(activeTab === "findings" ||
+            activeTab === "certificates" ||
+            activeTab === "technologies" ||
+            activeTab === "repositories") && (
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              {/* Table Search Toolbar */}
+              <div className="flex items-center justify-between gap-3">
+                <div className="relative flex-1 max-w-sm">
+                  <Search className="w-3.5 h-3.5 text-text-muted absolute left-2.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    placeholder={`Filter ${activeTab}...`}
+                    value={tableSearch}
+                    onChange={(e) => setTableSearch(e.target.value)}
+                    className="w-full pl-8 pr-3 py-1 text-xs rounded-control bg-surface border border-border-default focus:border-accent font-mono text-text-primary"
+                  />
+                </div>
+                <div className="text-[11px] font-mono text-text-muted">
+                  Showing {filteredCategoryFindings.length} of {findings.length}{" "}
+                  findings
+                </div>
+              </div>
+
+              {/* Dense Category Findings Table */}
+              {filteredCategoryFindings.length === 0 ? (
+                <div className="p-12 text-center text-xs text-text-muted border border-dashed border-border rounded-panel bg-surface">
+                  No {activeTab} records observed for this target.
+                </div>
+              ) : (
+                <div className="border border-border rounded-panel bg-surface overflow-hidden">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-canvas border-b border-border text-text-muted text-[11px] uppercase tracking-wider font-mono">
+                        <th className="py-2 px-3">Finding ID</th>
+                        <th className="py-2 px-3">Type</th>
+                        <th className="py-2 px-3">Value</th>
+                        <th className="py-2 px-3">Confidence</th>
+                        <th className="py-2 px-3">Sources</th>
+                        <th className="py-2 px-3 text-right">Proofs</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border-subtle">
+                      {filteredCategoryFindings.map((finding) => {
+                        const isSelected =
+                          selectedFinding?.finding_id === finding.finding_id;
+
+                        return (
+                          <tr
+                            key={finding.finding_id}
+                            onClick={() => handleSelectFinding(finding)}
+                            className={`cursor-pointer transition-colors ${
+                              isSelected
+                                ? "bg-selected border-l-2 border-l-accent"
+                                : "hover:bg-subtle/60"
+                            }`}
+                          >
+                            <td className="py-2 px-3 font-mono text-accent font-medium">
+                              {finding.finding_id}
+                            </td>
+                            <td className="py-2 px-3">
+                              <span className="inline-block px-1.5 py-0.5 rounded text-[10px] uppercase font-mono bg-canvas border border-border-subtle text-text-secondary">
+                                {finding.type}
+                              </span>
+                            </td>
+                            <td className="py-2 px-3 font-mono font-medium text-text-primary break-all">
+                              {finding.value}
+                            </td>
+                            <td className="py-2 px-3">
+                              <ConfidenceBadge confidence={finding.confidence} />
+                            </td>
+                            <td className="py-2 px-3 text-text-secondary font-mono text-[11px]">
+                              {finding.sources.join(", ")}
+                            </td>
+                            <td className="py-2 px-3 text-right font-mono text-text-muted">
+                              {finding.evidence_count} proofs
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 7: AI SUMMARY */}
+          {activeTab === "summary" && (
+            <div className="flex-1 overflow-y-auto p-4">
+              <SummaryCard
+                summaryData={summaryData}
+                onSelectFindingId={handleSelectFindingById}
+                onRegenerate={handleRegenerateSummary}
+                loading={loadingSummary}
+              />
             </div>
           )}
         </div>
@@ -316,6 +647,18 @@ export default function InvestigationWorkspacePage() {
         finding={selectedFinding}
         evidenceList={evidenceList}
         loading={loadingEvidence}
+      />
+
+      {/* Delete Investigation Dialog */}
+      <ConfirmDialog
+        open={isDeleteDialogOpen}
+        onOpenChange={setIsDeleteDialogOpen}
+        title="Delete Investigation"
+        description="Are you sure you want to permanently delete this investigation? This action removes all observed entities, relationships, and raw evidence records from the database."
+        confirmLabel="Delete Permanently"
+        confirmVariant="danger"
+        isProcessing={isDeleting}
+        onConfirm={handleDeleteInvestigation}
       />
     </div>
   );
