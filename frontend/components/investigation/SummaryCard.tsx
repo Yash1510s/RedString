@@ -167,35 +167,46 @@ export function SummaryCard({
         <div className="space-y-2">
           <h3 className="text-xs font-semibold uppercase tracking-wider text-text-muted font-mono flex items-center gap-1.5">
             <ShieldCheck className="w-3.5 h-3.5 text-success-fg" />
-            Key Findings
+            Key Findings ({summaryData.key_findings.length})
           </h3>
-          <ul className="space-y-1.5">
-            {summaryData.key_findings.map((finding, idx) => (
-              <li
-                key={idx}
-                className="text-xs text-text-secondary flex items-start gap-2 bg-canvas/40 p-2 rounded-control border border-border-subtle"
-              >
-                <span className="text-accent font-bold mt-0.5">•</span>
-                <div className="flex-1">
-                  <span>{finding.claim}</span>
-                  {finding.finding_ids.length > 0 && (
-                    <div className="inline-flex flex-wrap gap-1 ml-2">
-                      {finding.finding_ids.map((fid) => (
-                        <button
-                          key={fid}
-                          type="button"
-                          onClick={() => onSelectFindingId?.(fid)}
-                          className="px-1.5 py-0.2 rounded-xs font-mono text-[10px] bg-accent/10 text-accent hover:bg-accent/20 border border-accent/20 transition-colors"
-                          title={`Inspect evidence for ${fid}`}
-                        >
-                          {fid}
-                        </button>
-                      ))}
+          <ul className="space-y-2">
+            {summaryData.key_findings.map((finding: any, idx) => {
+              const claimText = finding.claim || finding.text || "Directly observed signal";
+              return (
+                <li
+                  key={idx}
+                  className="text-xs text-text-secondary flex items-start gap-2 bg-canvas/40 p-2.5 rounded-control border border-border-subtle"
+                >
+                  <span className="text-accent font-bold mt-0.5">•</span>
+                  <div className="flex-1 space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      {finding.category && (
+                        <span className="inline-block px-1.5 py-0.2 rounded-xs font-mono text-[10px] uppercase bg-canvas border border-border-subtle text-text-muted">
+                          {finding.category}
+                        </span>
+                      )}
+                      <span className="text-text-primary font-medium">{claimText}</span>
                     </div>
-                  )}
-                </div>
-              </li>
-            ))}
+                    {finding.finding_ids && finding.finding_ids.length > 0 && (
+                      <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                        <span className="text-[10px] font-mono text-text-muted">Evidence:</span>
+                        {finding.finding_ids.map((fid: string) => (
+                          <button
+                            key={fid}
+                            type="button"
+                            onClick={() => onSelectFindingId?.(fid)}
+                            className="px-1.5 py-0.2 rounded-xs font-mono text-[10px] bg-accent/10 text-accent hover:bg-accent/20 border border-accent/20 transition-colors"
+                            title={`Inspect raw provenance for ${fid}`}
+                          >
+                            {fid}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         </div>
       )}
@@ -204,35 +215,46 @@ export function SummaryCard({
       {summaryData.observations.length > 0 && (
         <div className="space-y-2">
           <h3 className="text-xs font-semibold uppercase tracking-wider text-text-muted font-mono">
-            Correlated Observations
+            Correlated Observations ({summaryData.observations.length})
           </h3>
-          <ul className="space-y-1.5">
-            {summaryData.observations.map((obs, idx) => (
-              <li
-                key={idx}
-                className="text-xs text-text-secondary flex items-start gap-2 bg-canvas/40 p-2 rounded-control border border-border-subtle"
-              >
-                <span className="text-accent font-bold mt-0.5">•</span>
-                <div className="flex-1">
-                  <span>{obs.observation}</span>
-                  {obs.finding_ids.length > 0 && (
-                    <div className="inline-flex flex-wrap gap-1 ml-2">
-                      {obs.finding_ids.map((fid) => (
-                        <button
-                          key={fid}
-                          type="button"
-                          onClick={() => onSelectFindingId?.(fid)}
-                          className="px-1.5 py-0.2 rounded-xs font-mono text-[10px] bg-accent/10 text-accent hover:bg-accent/20 border border-accent/20 transition-colors"
-                          title={`Inspect evidence for ${fid}`}
-                        >
-                          {fid}
-                        </button>
-                      ))}
+          <ul className="space-y-2">
+            {summaryData.observations.map((obs: any, idx) => {
+              const obsText = obs.observation || obs.text || "Correlated topology signal";
+              return (
+                <li
+                  key={idx}
+                  className="text-xs text-text-secondary flex items-start gap-2 bg-canvas/40 p-2.5 rounded-control border border-border-subtle"
+                >
+                  <span className="text-accent font-bold mt-0.5">•</span>
+                  <div className="flex-1 space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      {obs.confidence && (
+                        <span className="inline-block px-1.5 py-0.2 rounded-xs font-mono text-[10px] capitalize bg-canvas border border-border-subtle text-text-muted">
+                          {obs.confidence} confidence
+                        </span>
+                      )}
+                      <span className="text-text-primary">{obsText}</span>
                     </div>
-                  )}
-                </div>
-              </li>
-            ))}
+                    {obs.finding_ids && obs.finding_ids.length > 0 && (
+                      <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                        <span className="text-[10px] font-mono text-text-muted">Evidence:</span>
+                        {obs.finding_ids.map((fid: string) => (
+                          <button
+                            key={fid}
+                            type="button"
+                            onClick={() => onSelectFindingId?.(fid)}
+                            className="px-1.5 py-0.2 rounded-xs font-mono text-[10px] bg-accent/10 text-accent hover:bg-accent/20 border border-accent/20 transition-colors"
+                            title={`Inspect raw provenance for ${fid}`}
+                          >
+                            {fid}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         </div>
       )}

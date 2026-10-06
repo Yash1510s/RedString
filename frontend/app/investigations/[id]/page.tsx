@@ -96,9 +96,26 @@ export default function InvestigationWorkspacePage() {
   ]);
 
   const [loadingWorkspace, setLoadingWorkspace] = useState(true);
+  const [loadingGraph, setLoadingGraph] = useState(false);
+  const [graphError, setGraphError] = useState<string | null>(null);
   const [tableSearch, setTableSearch] = useState("");
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // Dedicated graph fetcher
+  const fetchGraph = useCallback(async () => {
+    try {
+      setLoadingGraph(true);
+      setGraphError(null);
+      const data = await getInvestigationGraph(id);
+      setGraphData(data);
+    } catch (err: any) {
+      console.error("Failed to load graph:", err);
+      setGraphError(err.message || "Failed to load graph data");
+    } finally {
+      setLoadingGraph(false);
+    }
+  }, [id]);
 
   // Load all investigation data
   const loadData = useCallback(async () => {
@@ -133,7 +150,7 @@ export default function InvestigationWorkspacePage() {
       }
 
       // Graph data
-      getInvestigationGraph(id).then(setGraphData).catch(() => {});
+      fetchGraph();
 
       // Summary data
       getInvestigationSummary(id).then(setSummaryData).catch(() => {});
@@ -142,7 +159,7 @@ export default function InvestigationWorkspacePage() {
     } finally {
       setLoadingWorkspace(false);
     }
-  }, [id]);
+  }, [id, fetchGraph]);
 
   useEffect(() => {
     loadData();
@@ -527,17 +544,40 @@ export default function InvestigationWorkspacePage() {
           {/* TAB 2: CYTOSCAPE GRAPH */}
           {activeTab === "graph" && (
             <div className="flex-1 flex flex-col overflow-hidden relative">
-              {graphData ? (
-                <GraphView
-                  graphData={graphData}
-                  onSelectEntity={handleSelectEntityFromGraph}
-                  selectedEntityId={selectedFinding?.entity_id}
-                />
-              ) : (
-                <div className="flex-1 flex items-center justify-center p-8 text-xs text-text-muted font-mono animate-pulse">
-                  Correlating entity graph...
+              {loadingGraph && !graphData ? (
+                <div className="flex-1 flex flex-col items-center justify-center p-8 text-xs text-text-muted font-mono space-y-2 animate-pulse">
+                  <RefreshCw className="w-4 h-4 animate-spin text-accent" />
+                  <span>Correlating entity relationship graph...</span>
                 </div>
-              )}
+              ) : graphError && !graphData ? (
+                <div className="flex-1 flex flex-col items-center justify-center p-8 text-xs text-danger-fg font-mono space-y-3">
+                  <span>Error loading graph: {graphError}</span>
+                  <button
+                    onClick={fetchGraph}
+                    className="px-3 py-1 text-xs border border-border-default rounded-control hover:bg-subtle text-text-primary"
+                  >
+                    ↻ Retry Loading Graph
+                  </button>
+                </div>
+              ) : graphData ? (
+                graphData.nodes.length === 0 ? (
+                  <div className="flex-1 flex flex-col items-center justify-center p-8 text-xs text-text-muted font-mono space-y-3">
+                    <span>No relationships or entities observed yet for this target.</span>
+                    <button
+                      onClick={fetchGraph}
+                      className="px-3 py-1 text-xs border border-border-default rounded-control hover:bg-subtle text-accent"
+                    >
+                      ↻ Refresh Graph
+                    </button>
+                  </div>
+                ) : (
+                  <GraphView
+                    graphData={graphData}
+                    onSelectEntity={handleSelectEntityFromGraph}
+                    selectedEntityId={selectedFinding?.entity_id}
+                  />
+                )
+              ) : null}
             </div>
           )}
 

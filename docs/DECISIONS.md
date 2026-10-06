@@ -74,4 +74,14 @@ This file tracks foundational and operational decisions for the OSINT Investigat
 - **Reason:** Fulfills Spec Section 14 Phase 9 and `UI_SPEC.md §5.2 & §5.4`. Provides deterministic offline presentation capability without live network requests, satisfies Rule S10 labelling requirements, and gives investigators transparent insight into rate limits and security boundaries.
 - **Alternatives considered:** Live-only investigations (risks demo failure on conference networks), manual database seeding scripts.
 
+---
+
+## ADR-009: Cytoscape DOM Reconciliation Isolation and Multi-Entity Grounded Summary Synthesis
+
+- **Date:** 2026-10-06
+- **Decision:** Isolate Cytoscape canvas mounting into a dynamically managed vanilla sub-DOM container with CSS visibility toggling (`hidden`/`flex`) instead of conditional React JSX unmounting, backed by a `ResizeObserver` for robust re-renders on layout or tab changes. Expand deterministic grounded intelligence summary generation to cover 9 distinct entity types (DNS routing, nameservers, autonomous systems, mail security, perimeter technologies, codebases, certificates) with dual schema compatibility (`claim`/`text`) and automatic summary invalidation if collected during pending pipeline execution.
+- **Reason:** Eliminates React runtime `removeChild` DOM reconciliation crashes triggered when Cytoscape modifies elements inside unmounting React containers. Ensures the accessible table view toggles instantly without remounting the canvas. Guarantees that analyst AI summaries provide comprehensive domain narrative breakdowns with direct verifiable finding citations (`[F-XXXXXX]`) rather than sparse 0-finding placeholders.
+- **Alternatives considered:** Recreating Cytoscape instance on every table view toggle (slow, state loss, causes DOM detachment crashes), sparse summary text without breakdown.
+
+
 

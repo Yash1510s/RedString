@@ -558,7 +558,16 @@ async def get_investigation_summary(
     )
     res = await session.execute(stmt)
     record = res.scalar_one_or_none()
+
+    # Check current entity count to see if we should auto-regenerate
+    count_stmt = select(func.count(Entity.id)).where(Entity.investigation_id == investigation_id)
+    current_count = (await session.execute(count_stmt)).scalar() or 0
+
     if record and record.output:
+        summary_text = str(record.output.get("summary", ""))
+        # If the cached summary had 0 verified findings, but entities are now observed, regenerate fresh!
+        if ("0 verified findings" in summary_text or len(record.output.get("key_findings", [])) == 0) and current_count > 0:
+            return await create_investigation_summary(investigation_id, session)
         return record.output
 
     # If not generated yet, generate template on the fly
