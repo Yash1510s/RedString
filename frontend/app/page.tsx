@@ -3,7 +3,12 @@
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { createInvestigation, listInvestigations, InvestigationItem } from "@/lib/api";
+import {
+  createInvestigation,
+  createDemoInvestigation,
+  listInvestigations,
+  InvestigationItem,
+} from "@/lib/api";
 
 export default function NewInvestigationPage() {
   const router = useRouter();
@@ -82,6 +87,18 @@ export default function NewInvestigationPage() {
     }
   };
 
+  const handleLoadDemo = async () => {
+    try {
+      setIsSubmitting(true);
+      setErrorMessage(null);
+      const demoInv = await createDemoInvestigation();
+      router.push(`/investigations/${demoInv.id}`);
+    } catch (err: any) {
+      setErrorMessage(err.message || "Failed to load demo investigation.");
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto w-full space-y-8">
       {/* Initiation Card */}
@@ -137,9 +154,20 @@ export default function NewInvestigationPage() {
 
           {/* Primary Target Input */}
           <div className="space-y-1.5">
-            <label htmlFor="target-input" className="block text-xs font-medium text-text-secondary">
-              {targetType === "domain" ? "Public Domain Name" : "Company or Organization Name"}
-            </label>
+            <div className="flex items-center justify-between">
+              <label htmlFor="target-input" className="block text-xs font-medium text-text-secondary">
+                {targetType === "domain" ? "Public Domain Name" : "Company or Organization Name"}
+              </label>
+              <button
+                type="button"
+                onClick={handleLoadDemo}
+                disabled={isSubmitting}
+                className="text-[11px] font-mono text-accent hover:underline flex items-center gap-1 cursor-pointer"
+                title="Instantly seed offline pre-correlated demo data without making external network calls"
+              >
+                <span>⚡ Load Offline Demo Data</span>
+              </button>
+            </div>
             <input
               id="target-input"
               type="text"
@@ -150,9 +178,44 @@ export default function NewInvestigationPage() {
               placeholder={targetType === "domain" ? "e.g. example.com" : "e.g. Example Inc"}
               className="w-full h-9 px-3 text-xs font-mono bg-canvas border border-border-default rounded-control text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-ring"
             />
-            <span className="text-[11px] text-text-muted block">
-              Enter public domain name (no http://, ports, paths, or IP addresses).
-            </span>
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
+              <span className="text-[11px] text-text-muted">
+                Enter public domain name (no http://, ports, paths, or IP addresses).
+              </span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] text-text-muted font-mono">Quick:</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTarget("jio.com");
+                    setTargetType("domain");
+                  }}
+                  className="px-1.5 py-0.5 text-[10px] font-mono rounded bg-canvas border border-border-default hover:border-accent text-text-secondary hover:text-accent transition-colors"
+                >
+                  jio.com
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTarget("xavier.ac.in");
+                    setTargetType("domain");
+                  }}
+                  className="px-1.5 py-0.5 text-[10px] font-mono rounded bg-canvas border border-border-default hover:border-accent text-text-secondary hover:text-accent transition-colors"
+                >
+                  xavier.ac.in
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTarget("github.com");
+                    setTargetType("domain");
+                  }}
+                  className="px-1.5 py-0.5 text-[10px] font-mono rounded bg-canvas border border-border-default hover:border-accent text-text-secondary hover:text-accent transition-colors"
+                >
+                  github.com
+                </button>
+              </div>
+            </div>
           </div>
 
           {/* Optional Official Domain for Company */}
