@@ -1,5 +1,6 @@
 """Audit-ready investigation report generator per Spec Section 12."""
 
+import re
 from collections import defaultdict
 from typing import Any
 
@@ -87,13 +88,13 @@ def _render_people_rows(people: list[Entity]) -> str:
 
 def _render_evidence_rows(evidence_list: list[Evidence]) -> str:
     rows = []
-    for ev in evidence_list[:50]:
+    for ev in evidence_list[:60]:
         ev_id = f"EV-{ev.id:06d}"
         source = ev.source_name
         ref = ev.source_ref or "Direct query"
         ts = ev.collected_at.strftime("%Y-%m-%d %H:%M:%S")
         rows.append(
-            f"<tr><td class='code'>{ev_id}</td><td>{source}</td>"
+            f"<tr id='ev-{ev_id}'><td class='code'><strong>{ev_id}</strong></td><td>{source}</td>"
             f"<td class='code'>{ref}</td><td>{ts}</td></tr>"
         )
     return "\n".join(rows)
@@ -102,14 +103,185 @@ def _render_evidence_rows(evidence_list: list[Evidence]) -> str:
 def _render_observations(key_findings: list[dict[str, Any]], observations: list[dict[str, Any]]) -> str:
     items = []
     for kf in key_findings:
-        text = str(kf.get("text", ""))
-        chips = " ".join(f"<span class='chip'>{fid}</span>" for fid in kf.get("finding_ids", []))
-        items.append(f"<li>{text} {chips}</li>")
+        text = str(kf.get("claim") or kf.get("text", ""))
+        category = kf.get("category", "")
+        cat_badge = (
+            f"<span class='badge' style='background:#f4f4f5; color:#52525b; border:1px solid #e4e4e7; margin-right:6px;'>{category}</span>"
+            if category
+            else ""
+        )
+        chips = " ".join(
+            f"<span class='finding-badge'>{fid}</span>"
+            for fid in kf.get("finding_ids", [])
+        )
+        items.append(f"<li style='margin-bottom:8px; line-height:1.5;'>{cat_badge}{text} {chips}</li>")
+
     for obs in observations:
-        text = str(obs.get("text", ""))
-        chips = " ".join(f"<span class='chip'>{fid}</span>" for fid in obs.get("finding_ids", []))
-        items.append(f"<li>{text} {chips}</li>")
-    return "\n".join(items)
+        text = str(obs.get("observation") or obs.get("text", ""))
+        conf = str(obs.get("confidence", "high")).upper()
+        conf_badge = f"<span class='badge' style='background:#f4f4f5; color:#52525b; border:1px solid #e4e4e7; margin-right:6px;'>{conf} CONFIDENCE</span>"
+        chips = " ".join(
+            f"<span class='finding-badge'>{fid}</span>"
+            for fid in obs.get("finding_ids", [])
+        )
+        items.append(f"<li style='margin-bottom:8px; line-height:1.5;'>{conf_badge}{text} {chips}</li>")
+
+    return "\n".join(items) if items else "<li>No structured observations recorded.</li>"
+
+
+def _render_security_posture_table(entities: list[Entity]) -> str:
+    """Evaluate passive perimeter security posture per Rule S1."""
+    dmarc_status = (
+        "No DMARC Record Observed",
+        "RISK",
+        "Domain is vulnerable to active email spoofing and unauthorized sender impersonation.",
+        "#fef2f2",
+        "#991b1b",
+        "#fecaca",
+    )
+    spf_status = (
+        "No SPF Record Observed",
+        "RISK",
+        "Sending mail gateways unauthenticated; mail transfer agents may reject or flag mail.",
+        "#fef2f2",
+        "#991b1b",
+        "#fecaca",
+    )
+
+    for e in entities:
+        val = (e.value or "").lower()
+        txt = str(e.attributes.get("txt_strings", "") if e.attributes else "").lower()
+        combined = f"{val} {txt}"
+        if "v=dmarc1" in combined:
+            if "p=reject" in combined:
+                dmarc_status = (
+                    "DMARC Reject Policy Enforced (p=reject)",
+                    "SECURE",
+                    "Strict policy actively rejects unauthorized spoofed email.",
+                    "#ecfdf5",
+                    "#065f46",
+                    "#a7f3d0",
+                )
+            elif "p=quarantine" in combined:
+                dmarc_status = (
+                    "DMARC Quarantine Policy Active (p=quarantine)",
+                    "WARNING",
+                    "Spoofed messages redirected to spam quarantine rather than outright rejected.",
+                    "#fffbeb",
+                    "#92400e",
+                    "#fde68a",
+                )
+            else:
+                dmarc_status = (
+                    "DMARC Monitoring Only (p=none)",
+                    "WARNING",
+                    "Policy set to monitoring mode; domain remains vulnerable to active spoofing.",
+                    "#fffbeb",
+                    "#92400e",
+                    "#fde68a",
+                )
+        if "v=spf1" in combined:
+            if "-all" in combined:
+                spf_status = (
+                    "Hard-Fail SPF Enforced (-all)",
+                    "SECURE",
+                    "Authoritative sending gateway list strictly enforced.",
+                    "#ecfdf5",
+                    "#065f46",
+                    "#a7f3d0",
+                )
+            elif "~all" in combined:
+                spf_status = (
+                    "Soft-Fail SPF Active (~all)",
+                    "WARNING",
+                    "Permissive soft-fail allows unlisted gateways with warning tag.",
+                    "#fffbeb",
+                    "#92400e",
+                    "#fde68a",
+                )
+            else:
+                spf_status = (
+                    "Permissive SPF Configuration",
+                    "RISK",
+                    "SPF rules do not restrict sending gateways.",
+                    "#fef2f2",
+                    "#991b1b",
+                    "#fecaca",
+                )
+
+    # Nameserver redundancy
+    ns_ents = [e for e in entities if e.type == "nameserver"]
+    if len(ns_ents) >= 2:
+        ns_status = (
+            f"{len(ns_ents)} Independent Authoritative Nameservers",
+            "SECURE",
+            "Authoritative DNS resolution distributed across multiple nameservers.",
+            "#ecfdf5",
+            "#065f46",
+            "#a7f3d0",
+        )
+    elif len(ns_ents) == 1:
+        ns_status = (
+            "Single Nameserver Observed (SPOF)",
+            "RISK",
+            "Potential single point of failure in DNS delegation.",
+            "#fef2f2",
+            "#991b1b",
+            "#fecaca",
+        )
+    else:
+        ns_status = (
+            "Nameservers Unobserved",
+            "WARNING",
+            "No authoritative nameservers discovered in passive query.",
+            "#fffbeb",
+            "#92400e",
+            "#fde68a",
+        )
+
+    # Cloud/CDN Shielding
+    tech_ents = [e for e in entities if e.type in ("technology", "cloud_provider")]
+    cdn_found = [
+        e.value
+        for e in tech_ents
+        if any(k in e.value.lower() for k in ("cloudflare", "cloudfront", "fastly", "akamai"))
+    ]
+    if cdn_found:
+        cdn_status = (
+            f"Perimeter Shielded ({', '.join(cdn_found)})",
+            "SECURE",
+            "Origin hosting IP protected behind reverse proxy and DDoS mitigation network.",
+            "#ecfdf5",
+            "#065f46",
+            "#a7f3d0",
+        )
+    else:
+        cdn_status = (
+            "Direct Origin IP Exposure (No CDN Shield)",
+            "WARNING",
+            "Web traffic resolves directly to origin hosting IP without reverse-proxy DDoS layer.",
+            "#fffbeb",
+            "#92400e",
+            "#fde68a",
+        )
+
+    rows = [
+        ("Email Spoofing Defense (DMARC)", dmarc_status),
+        ("Sender Policy Framework (SPF)", spf_status),
+        ("DNS Redundancy & Availability", ns_status),
+        ("Perimeter Shielding & Origin Privacy", cdn_status),
+    ]
+
+    html_rows = []
+    for category, (title, label, desc, bg, fg, border) in rows:
+        pill = f"<span class='badge' style='background:{bg}; color:{fg}; border:1px solid {border}; font-weight:700;'>{label}</span>"
+        html_rows.append(
+            f"<tr><td style='font-weight:600; width:30%;'>{category}</td>"
+            f"<td><strong>{title}</strong><div style='font-size:8.5pt; color:#52525b; margin-top:2px;'>{desc}</div></td>"
+            f"<td style='text-align:center; width:15%;'>{pill}</td></tr>"
+        )
+
+    return "\n".join(html_rows)
 
 
 def generate_html_report(
@@ -151,7 +323,33 @@ def generate_html_report(
         summary_data.get("key_findings", []),
         summary_data.get("observations", []),
     )
-    summary_text = summary_data.get("summary", "No summary available.")
+    security_posture_html = _render_security_posture_table(entities)
+
+    raw_summary_text = summary_data.get("summary", "No summary available.")
+    # Convert raw finding citations (F-000XXX) into styled badges
+    formatted_summary = re.sub(
+        r"\b(F-\d{6})\b",
+        r"<span class='finding-badge'>\1</span>",
+        raw_summary_text,
+    )
+
+    model_badge = str(
+        summary_data.get("generator")
+        or summary_data.get("model")
+        or "Deterministic Grounded Engine"
+    )
+
+    next_steps = summary_data.get("next_steps", [])
+    recommendations_html = ""
+    if next_steps:
+        recommendations_html = f"""
+        <div class="recommendation-box">
+          <strong>Recommended Analyst Actions & Hardening Priorities:</strong>
+          <ul>
+            {"".join(f"<li>{step}</li>" for step in next_steps)}
+          </ul>
+        </div>
+        """
 
     html = f"""<!DOCTYPE html>
 <html lang="en">
@@ -201,7 +399,7 @@ def generate_html_report(
     color: #09090b;
     border-bottom: 1px solid #e4e4e7;
     padding-bottom: 4px;
-    margin-top: 24px;
+    margin-top: 26px;
     margin-bottom: 12px;
   }}
   table {{
@@ -228,19 +426,71 @@ def generate_html_report(
     text-transform: uppercase;
     background: #f4f4f5;
   }}
+  .finding-badge {{
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 8pt;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-weight: 600;
+    background: #eff6ff;
+    color: #1d4ed8;
+    border: 1px solid #bfdbfe;
+    text-decoration: none;
+    margin: 1px 2px;
+    vertical-align: middle;
+  }}
   .code {{
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     font-size: 9pt;
   }}
-  .chip {{
-    display: inline-block;
-    background: #f4f4f5;
-    border: 1px solid #e4e4e7;
-    border-radius: 4px;
-    padding: 1px 6px;
-    margin-right: 4px;
-    font-size: 8pt;
-    font-family: monospace;
+  .executive-box {{
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-left: 4px solid #2563eb;
+    padding: 16px 20px;
+    border-radius: 6px;
+    margin-bottom: 20px;
+  }}
+  .exec-header {{
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #e2e8f0;
+    padding-bottom: 8px;
+    margin-bottom: 12px;
+  }}
+  .exec-title {{
+    font-size: 10pt;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #1e293b;
+    font-family: ui-monospace, monospace;
+  }}
+  .exec-body {{
+    font-size: 10pt;
+    color: #334155;
+    line-height: 1.6;
+  }}
+  .recommendation-box {{
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    border-left: 4px solid #16a34a;
+    padding: 14px 18px;
+    border-radius: 6px;
+    margin-top: 16px;
+    margin-bottom: 20px;
+    font-size: 9.5pt;
+    color: #166534;
+  }}
+  .recommendation-box ul {{
+    margin: 6px 0 0 16px;
+    padding: 0;
+  }}
+  .recommendation-box li {{
+    margin-bottom: 4px;
+    color: #14532d;
   }}
   .disclaimer {{
     background: #fafafa;
@@ -381,6 +631,20 @@ def generate_html_report(
   <tr><th>Mail Providers</th><td>{", ".join(mail_list) or "None discovered"}</td></tr>
 </table>
 
+<h2>5b. Passive Security Posture & Exposure Matrix</h2>
+<table>
+  <thead>
+    <tr>
+      <th>Security Control</th>
+      <th>Passive Observation & Posture Analysis</th>
+      <th style="text-align:center; width:18%;">Posture Rating</th>
+    </tr>
+  </thead>
+  <tbody>
+    {security_posture_html}
+  </tbody>
+</table>
+
 <h2>6. Certificate Findings</h2>
 <table>
   <tr><th>Serial</th><th>Issuer</th><th>Valid From</th><th>Valid Until</th><th>Wildcard</th></tr>
@@ -417,11 +681,23 @@ def generate_html_report(
   <tr><th>Graph Model</th><td>Cytoscape-compatible typed property graph</td></tr>
 </table>
 
-<h2>11. Key Observations & Executive Summary</h2>
-<p><strong>Executive Summary:</strong> {summary_text}</p>
-<ul>
+<h2>11. Executive Threat Intelligence & Exposure Assessment</h2>
+<div class="executive-box">
+  <div class="exec-header">
+    <span class="exec-title">Intelligence Synthesis & Architecture Breakdown</span>
+    <span class="badge" style="background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe; font-weight:700;">PROCESSED VIA {model_badge}</span>
+  </div>
+  <div class="exec-body">
+    {formatted_summary}
+  </div>
+</div>
+
+<h3 style="font-size:11pt; margin-top:20px; margin-bottom:10px; color:#1e293b; font-weight:600;">Key Technical Findings & Correlated Observations</h3>
+<ul style="padding-left:18px; margin-bottom:16px;">
   {obs_html}
 </ul>
+
+{recommendations_html}
 
 <h2>12. Evidence References (Sample of Records)</h2>
 <table>

@@ -119,15 +119,19 @@ class GitHubCollector:
             language = item.get("language")
 
             # Determine match confidence per Spec Section 6
+            domain_stem = clean_domain.split(".")[0]
             if clean_domain in homepage:
                 conf = Confidence.high
                 match_basis = "homepage_exact_match"
-            elif clean_domain in description.lower():
+            elif clean_domain in description.lower() or clean_domain in full_name.lower():
                 conf = Confidence.medium
-                match_basis = "description_match"
-            else:
+                match_basis = "domain_text_match"
+            elif domain_stem in full_name.lower() and (stars >= 5 or clean_domain in (item.get("topics") or [])):
                 conf = Confidence.low
-                match_basis = "search_relevance"
+                match_basis = "keyword_relevance"
+            else:
+                # Discard unrelated keyword noise (e.g. Jetson AGX Xavier hardware projects)
+                continue
 
             ev_repo = EvidenceIn(
                 source_name=self.name,
